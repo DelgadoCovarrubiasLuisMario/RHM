@@ -110,10 +110,10 @@ function mostrarSueldos(sueldos, periodo, area) {
                         <span class="resumen-detalle">(${sueldo.resumen.horas_dobles}h dobles + ${sueldo.resumen.horas_triples}h triples)</span>
                     </div>
                     ${sueldo.calculos?.descuento_faltas > 0 ? `
-                    <div class="resumen-item negativo">
-                        <span class="resumen-label">Descuento Faltas:</span>
+                    <div class="resumen-item negativo" style="opacity: 0.7; font-style: italic;">
+                        <span class="resumen-label">Descuento Faltas (info):</span>
                         <span class="resumen-value">-$${sueldo.calculos.descuento_faltas}</span>
-                        <span class="resumen-detalle">(${sueldo.resumen.dias_faltados || 0} día(s) faltado(s))</span>
+                        <span class="resumen-detalle">(${sueldo.resumen.dias_faltados || 0} día(s) faltado(s) - solo informativo)</span>
                     </div>
                     ` : ''}
                     ${sueldo.calculos?.descuentos_varios > 0 ? `
@@ -232,10 +232,13 @@ function verDesglose(empleadoId, nombreEmpleado) {
                     <span class="calculo-monto"><strong>$${datosSueldo.calculos?.monto_horas_turno || '0.00'}</strong></span>
                 </div>
                 ${datosSueldo.calculos?.descuento_faltas > 0 ? `
-                <div class="calculo-item negativo">
-                    <span class="calculo-label">Descuento por Faltas:</span>
-                    <span class="calculo-value">${datosSueldo.resumen?.dias_faltados || 0} día(s)</span>
+                <div class="calculo-item negativo" style="opacity: 0.7; font-style: italic;">
+                    <span class="calculo-label">Descuento por Faltas (información):</span>
+                    <span class="calculo-value">${datosSueldo.resumen?.dias_faltados || 0} día(s) faltado(s)</span>
                     <span class="calculo-monto">-$${datosSueldo.calculos.descuento_faltas}</span>
+                    <div style="font-size: 0.85em; color: #666; margin-top: 5px;">
+                        ⓘ Este descuento es solo informativo. El pago se basa en horas trabajadas.
+                    </div>
                 </div>
                 ` : ''}
                 ${datosSueldo.calculos?.descuentos_varios > 0 ? `

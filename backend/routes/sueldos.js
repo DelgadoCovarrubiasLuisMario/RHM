@@ -581,18 +581,20 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
     // Horas turno: multiplicador 0.95 (no 0.85)
     const montoHorasTurno = horasTurnoSemana * pagoPorHora * 2 * 0.95;
 
-    // Descuento por faltas: se calcula por días faltados
+    // Descuento por faltas: se calcula por días faltados (solo para mostrar, NO se aplica)
     // Sueldo por día = Sueldo base / 6 días
     // Descuento = (Sueldo base / 6) × días faltados
+    // NOTA: Este descuento NO se aplica al total. Se muestra solo como información.
+    // El descuento se aplica naturalmente: si trabaja menos horas, gana menos.
     const sueldoPorDia = sueldoBase / 6;
     const descuentoFaltas = diasFaltados * sueldoPorDia;
     
     // Calcular total semanal:
-    // (Horas trabajadas con cálculos pertinentes) - (Descuentos varios y por faltas)
-    // El total nunca puede ser negativo (mínimo $0)
+    // (Horas trabajadas con cálculos pertinentes) - (Solo descuentos varios, NO descuento por faltas)
+    // El descuento por faltas se aplica naturalmente: si trabaja menos horas, gana menos
     const totalGanado = sueldoBaseCalculado + montoHorasDobles + montoHorasTriples + montoHorasTurno;
-    const totalBruto = totalGanado - descuentoFaltas - descuentosVarios;
-    const total = Math.max(0, totalBruto); // El total no puede ser negativo
+    const totalBruto = totalGanado - descuentosVarios; // NO restar descuentoFaltas
+    const total = Math.max(0, totalBruto); // El total no puede ser negativo (solo por descuentos varios)
 
     return {
         desglose_diario: desgloseDiario,
