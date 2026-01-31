@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inducción y Cursos - RHM</title>
+    <link rel="stylesheet" href="../styles/main.css">
+</head>
+<body>
+    <div class="container">
+        <div class="admin-card">
+            <!-- Header -->
+            <div class="card-header">
+                <button class="btn-back" onclick="volver()">←</button>
+                <div class="header-content">
+                    <div class="header-icon">📚</div>
+                    <h1>Inducción y Cursos</h1>
+                </div>
+            </div>
+
+            <!-- Lista de Empleados -->
+            <div class="area-section">
+                <div class="area-section-header">
+                    <h2>📋 Empleados</h2>
+                    <span class="area-count" id="countPlanta">0 empleados</span>
+                </div>
+                <div class="content-section">
+                    <div id="cargandoPlanta" class="loading" style="display: none;">
+                        <div class="spinner"></div>
+                        <p>Cargando empleados...</p>
+                    </div>
+                    <div id="listaEmpleadosPlanta" class="empleados-lista"></div>
+                    <div id="sinEmpleadosPlanta" class="empty-state" style="display: none;">
+                        <p>No hay empleados registrados</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/theme.js"></script>
+    <script src="../js/config.js"></script>
+    <script src="../js/admin-induccion.js"></script>
+</body>
+</html>
+

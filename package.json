@@ -1,0 +1,26 @@
+{
+  "name": "rhm-app",
+  "version": "1.0.0",
+  "description": "Sistema de Recursos Humanos RHM - Operación para tu empresa",
+  "main": "backend/server.js",
+  "scripts": {
+    "start": "node backend/server.js",
+    "dev": "node backend/server.js"
+  },
+  "keywords": [
+    "rhr",
+    "recursos-humanos",
+    "asistencia",
+    "qr"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "body-parser": "^1.20.2",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "qrcode": "^1.5.3",
+    "sqlite3": "^5.1.6",
+    "xlsx": "^0.18.5"
+  }
+}

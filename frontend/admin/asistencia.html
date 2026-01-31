@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Asistencia - Admin - RHM</title>
+    <link rel="stylesheet" href="../styles/main.css">
+</head>
+<body>
+    <div class="container">
+        <div class="admin-card">
+            <!-- Header -->
+            <div class="card-header">
+                <button class="btn-back" onclick="volver()">←</button>
+                <div class="header-content">
+                    <div class="header-icon">📊</div>
+                    <h1>Asistencia</h1>
+                </div>
+            </div>
+
+            <!-- Filtros -->
+            <div class="filtros-section">
+                <div class="filtro-group">
+                    <label for="filtroFechaInicio">Fecha Inicio:</label>
+                    <input type="date" id="filtroFechaInicio">
+                </div>
+                <div class="filtro-group">
+                    <label for="filtroFechaFin">Fecha Fin:</label>
+                    <input type="date" id="filtroFechaFin">
+                </div>
+                <div class="filtro-group">
+                    <label for="filtroMovimiento">Movimiento:</label>
+                    <select id="filtroMovimiento">
+                        <option value="">Todos</option>
+                        <option value="ENTRADA">Solo Entradas</option>
+                        <option value="SALIDA">Solo Salidas</option>
+                    </select>
+                </div>
+                <button class="btn btn-primary" onclick="cargarAsistencia()">Buscar</button>
+                <button class="btn btn-secondary" onclick="limpiarFiltros()">Limpiar</button>
+            </div>
+
+            <!-- Lista de Asistencia -->
+            <div class="area-section">
+                <div class="area-section-header">
+                    <h2>📋 Asistencia</h2>
+                    <span class="area-count" id="countPlanta">0 registros</span>
+                </div>
+                <div class="asistencia-lista" id="listaAsistenciaPlanta">
+                    <div class="loading">Cargando asistencia...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Configuración de API -->
+    <script src="../js/theme.js"></script>
+    <script src="../js/config.js"></script>
+    <script src="../js/admin-asistencia.js"></script>
+</body>
+</html>
+

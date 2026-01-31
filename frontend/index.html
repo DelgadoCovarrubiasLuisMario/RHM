@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Sistema de Recursos Humanos - RHM">
+    <title>RHM - Login</title>
+    <link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+    <div class="container">
+        <div class="login-card">
+            <div class="logo-section">
+                <img src="images/rhm-logo.webp" alt="RHM Logo" class="logo-image" onerror="this.style.display='none'; document.querySelector('.logo-text').style.display='block';">
+                <div class="logo-text" style="display: none;">
+                    <h1>RHM</h1>
+                    <p>Operación para tu empresa</p>
+                </div>
+            </div>
+            
+            <div class="login-tabs">
+                <button class="tab-btn active" data-tab="admin">Administrador</button>
+                <button class="tab-btn" data-tab="empleado">Empleado</button>
+            </div>
+
+            <!-- Formulario Admin -->
+            <div id="admin-login" class="login-form active">
+                <form id="adminForm">
+                    <div class="form-group">
+                        <label for="adminUsuario">Usuario</label>
+                        <input type="text" id="adminUsuario" name="usuario" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="adminPassword">Contraseña</label>
+                        <input type="password" id="adminPassword" name="password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Iniciar Sesión</button>
+                </form>
+            </div>
+
+            <!-- Formulario Empleado -->
+            <div id="empleado-login" class="login-form">
+                <div style="text-align: center;">
+                    <p style="margin-bottom: 1.5rem; color: var(--text-secondary);">Acceso al perfil de empleado</p>
+                    <button id="accederPerfil" class="btn btn-primary" style="width: 100%;">Acceder al Perfil</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/theme.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
+

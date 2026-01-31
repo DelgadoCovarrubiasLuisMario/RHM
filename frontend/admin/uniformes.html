@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Uniformes y Botas - Admin - RHM</title>
+    <link rel="stylesheet" href="../styles/main.css">
+</head>
+<body>
+    <div class="container">
+        <div class="admin-card">
+            <!-- Header -->
+            <div class="card-header">
+                <button class="btn-back" onclick="volver()">←</button>
+                <div class="header-content">
+                    <div class="header-icon">👔</div>
+                    <h1>Uniformes y Botas</h1>
+                </div>
+            </div>
+
+            <!-- Botones de acción -->
+            <div class="acciones-section">
+                <button class="btn btn-primary" onclick="abrirModalRegistrar()">
+                    ➕ Registrar Entrega
+                </button>
+            </div>
+
+            <!-- Filtros -->
+            <div class="filtros-section">
+                <div class="filtro-group">
+                    <label for="filtroFechaDesde">Desde:</label>
+                    <input type="date" id="filtroFechaDesde">
+                </div>
+                <div class="filtro-group">
+                    <label for="filtroFechaHasta">Hasta:</label>
+                    <input type="date" id="filtroFechaHasta">
+                </div>
+                <button class="btn btn-secondary" onclick="cargarEntregas()">Filtrar</button>
+                <button class="btn btn-secondary" onclick="limpiarFiltros()">Limpiar</button>
+            </div>
+
+            <!-- Lista de Entregas -->
+            <div class="area-section">
+                <div class="area-section-header">
+                    <h2>👕 Uniformes y Botas</h2>
+                    <span class="area-count" id="countPlanta">0 entregas</span>
+                </div>
+                <div class="entregas-lista" id="listaEntregasPlanta">
+                    <div class="loading">Cargando entregas...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para registrar entrega -->
+    <div id="modalRegistrar" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Registrar Entrega</h2>
+                <button class="modal-close" onclick="cerrarModalRegistrar()">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="formRegistrar">
+                    <div class="form-group">
+                        <label for="busquedaEmpleadosModal">Buscar empleados:</label>
+                        <input type="text" id="busquedaEmpleadosModal" placeholder="🔍 Buscar por nombre o código..." onkeyup="filtrarEmpleadosModal()">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Seleccionar Empleados *</label>
+                        <div class="empleados-checklist" id="empleadosChecklist">
+                            <div class="loading">Cargando empleados...</div>
+                        </div>
+                        <small class="help-text">Selecciona uno o más empleados</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="tipoEntrega">Tipo de Entrega *</label>
+                        <select id="tipoEntrega" required>
+                            <option value="">Selecciona...</option>
+                            <option value="uniforme">Uniforme</option>
+                            <option value="botas">Botas</option>
+                            <option value="ambos">Ambos</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="fechaEntrega">Fecha de Entrega *</label>
+                        <input type="date" id="fechaEntrega" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="observaciones">Observaciones (opcional)</label>
+                        <textarea id="observaciones" rows="3" placeholder="Notas adicionales..."></textarea>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" onclick="cerrarModalRegistrar()">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">Registrar Entrega</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Configuración de API -->
+    <script src="../js/theme.js"></script>
+    <script src="../js/config.js"></script>
+    <script src="../js/admin-uniformes.js"></script>
+</body>
+</html>
+

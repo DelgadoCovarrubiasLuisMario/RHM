@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Empleados - Admin - RHM</title>
+    <link rel="stylesheet" href="../styles/main.css">
+</head>
+<body>
+    <div class="container">
+        <div class="admin-card">
+            <!-- Header -->
+            <div class="card-header">
+                <button class="btn-back" onclick="volver()">←</button>
+                <div class="header-content">
+                    <div class="header-icon">👥</div>
+                    <h1>Empleados</h1>
+                </div>
+                <button class="btn btn-primary" onclick="abrirModalEmpleado()" style="margin-left: auto;">
+                    ➕ Agregar Empleado
+                </button>
+            </div>
+
+            <!-- Búsqueda -->
+            <div class="busqueda-section">
+                <div class="busqueda-input-wrapper">
+                    <input 
+                        type="text" 
+                        id="busquedaEmpleados" 
+                        class="busqueda-input" 
+                        placeholder="🔍 Buscar por nombre o código..."
+                        onkeyup="filtrarEmpleados()"
+                    >
+                </div>
+            </div>
+
+            <!-- Lista de Empleados -->
+            <div class="area-section">
+                <div class="area-section-header">
+                    <h2>👥 Empleados</h2>
+                    <span class="area-count" id="countPlanta">0 empleados</span>
+                </div>
+                <div class="empleados-lista" id="listaEmpleadosPlanta">
+                    <div class="loading">Cargando empleados...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para agregar descuento -->
+    <div id="modalDescuento" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTituloDescuento">Agregar Descuento</h2>
+                <button class="modal-close" onclick="cerrarModalDescuento()">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="formDescuento">
+                    <input type="hidden" id="empleadoIdDescuento">
+                    <input type="hidden" id="empleadoNombreDescuento">
+                    
+                    <div class="form-group">
+                        <label for="fechaInicioDescuento">Fecha Inicio (Semana):</label>
+                        <input type="date" id="fechaInicioDescuento" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="fechaFinDescuento">Fecha Fin (Semana):</label>
+                        <input type="date" id="fechaFinDescuento" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="montoDescuento">Monto del Descuento ($):</label>
+                        <input type="number" id="montoDescuento" step="0.01" min="0.01" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="descripcionDescuento">Descripción (opcional):</label>
+                        <textarea id="descripcionDescuento" rows="3" placeholder="Ej: Descuento por préstamo, multa, etc."></textarea>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" onclick="cerrarModalDescuento()">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">Agregar Descuento</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para ver descuentos -->
+    <div id="modalVerDescuentos" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTituloVerDescuentos">Descuentos</h2>
+                <button class="modal-close" onclick="cerrarModalVerDescuentos()">×</button>
+            </div>
+            <div class="modal-body" id="modalBodyDescuentos">
+                <!-- Contenido de descuentos -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para agregar/editar empleado -->
+    <div id="modalEmpleado" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2 id="modalTituloEmpleado">Agregar Empleado</h2>
+                <button class="modal-close" onclick="cerrarModalEmpleado()">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="formEmpleado">
+                    <input type="hidden" id="empleadoId">
+                    
+                    <div class="form-group">
+                        <label for="empleadoNombre">Nombre *</label>
+                        <input type="text" id="empleadoNombre" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="empleadoApellido">Apellido *</label>
+                        <input type="text" id="empleadoApellido" required>
+                    </div>
+                    
+                    
+                    <div class="form-group">
+                        <label for="empleadoCargo">Cargo</label>
+                        <input type="text" id="empleadoCargo" placeholder="Ej: OFICIAL ELECTRICO, AYUDANTE GENERAL, etc.">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="empleadoSueldo">Sueldo Base ($) *</label>
+                        <input type="number" id="empleadoSueldo" step="0.01" min="0" placeholder="2000" value="2000" required>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" onclick="cerrarModalEmpleado()">Cancelar</button>
+                        <button type="submit" class="btn btn-primary" id="btnGuardarEmpleado">Guardar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Configuración de API -->
+    <script src="../js/theme.js"></script>
+    <script src="../js/config.js"></script>
+    <script src="../js/admin-empleados.js"></script>
+</body>
+</html>
+

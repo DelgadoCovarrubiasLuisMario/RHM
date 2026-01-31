@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sueldos - Admin - RHM</title>
+    <link rel="stylesheet" href="../styles/main.css">
+</head>
+<body>
+    <div class="container">
+        <div class="admin-card">
+            <!-- Header -->
+            <div class="card-header">
+                <button class="btn-back" onclick="volver()">←</button>
+                <div class="header-content">
+                    <div class="header-icon">💰</div>
+                    <h1>Sueldos</h1>
+                </div>
+            </div>
+
+            <!-- Filtros -->
+            <div class="filtros-section">
+                <div class="filtro-group">
+                    <label for="filtroFechaInicio">Semana desde:</label>
+                    <input type="date" id="filtroFechaInicio" onchange="actualizarFechaFin()">
+                </div>
+                <div class="filtro-group">
+                    <label for="filtroFechaFin">Hasta:</label>
+                    <input type="date" id="filtroFechaFin">
+                </div>
+                <button class="btn btn-primary" onclick="cargarSueldos()">Calcular Sueldos</button>
+                <button class="btn btn-secondary" onclick="limpiarFiltros()">Limpiar</button>
+            </div>
+
+            <!-- Lista de Sueldos -->
+            <div class="area-section">
+                <div class="area-section-header">
+                    <h2>💰 Sueldos</h2>
+                    <span class="area-count" id="countPlanta">0 empleados</span>
+                </div>
+                <div class="sueldos-lista" id="listaSueldosPlanta">
+                    <div class="loading">Selecciona un rango de fechas y haz clic en "Calcular Sueldos"</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para ver desglose detallado -->
+    <div id="modalDesglose" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitulo">Desglose de Sueldo</h2>
+                <button class="modal-close" onclick="cerrarModal()">×</button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- Contenido del desglose -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Configuración de API -->
+    <script src="../js/theme.js"></script>
+    <script src="../js/config.js"></script>
+    <script src="../js/admin-sueldos.js"></script>
+</body>
+</html>
+
+

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vacaciones - Admin - RHM</title>
+    <link rel="stylesheet" href="../styles/main.css">
+</head>
+<body>
+    <div class="container">
+        <div class="admin-card">
+            <!-- Header -->
+            <div class="card-header">
+                <button class="btn-back" onclick="volver()">←</button>
+                <div class="header-content">
+                    <div class="header-icon">🏖️</div>
+                    <h1>Vacaciones</h1>
+                </div>
+            </div>
+
+            <!-- Botones de acción -->
+            <div class="acciones-section">
+                <button class="btn btn-primary" onclick="abrirModalRegistrar()">
+                    ➕ Registrar Vacaciones
+                </button>
+            </div>
+
+            <!-- Filtros -->
+            <div class="filtros-section">
+                <div class="filtro-group">
+                    <label for="filtroFechaDesde">Desde:</label>
+                    <input type="date" id="filtroFechaDesde">
+                </div>
+                <div class="filtro-group">
+                    <label for="filtroFechaHasta">Hasta:</label>
+                    <input type="date" id="filtroFechaHasta">
+                </div>
+                <button class="btn btn-secondary" onclick="cargarVacaciones()">Filtrar</button>
+                <button class="btn btn-secondary" onclick="limpiarFiltros()">Limpiar</button>
+            </div>
+
+            <!-- Lista de Vacaciones -->
+            <div class="area-section">
+                <div class="area-section-header">
+                    <h2>🏖️ Vacaciones</h2>
+                    <span class="area-count" id="countPlanta">0 registros</span>
+                </div>
+                <div class="entregas-lista" id="listaVacacionesPlanta">
+                    <div class="loading">Cargando vacaciones...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para registrar vacaciones -->
+    <div id="modalRegistrar" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Registrar Vacaciones</h2>
+                <button class="modal-close" onclick="cerrarModalRegistrar()">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="formRegistrar">
+                    <div class="form-group">
+                        <label for="busquedaEmpleadosModal">Buscar empleados:</label>
+                        <input type="text" id="busquedaEmpleadosModal" placeholder="🔍 Buscar por nombre o código..." onkeyup="filtrarEmpleadosModal()">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Seleccionar Empleados *</label>
+                        <div class="empleados-checklist" id="empleadosChecklist">
+                            <div class="loading">Cargando empleados...</div>
+                        </div>
+                        <small class="help-text">Selecciona uno o más empleados</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="fechaInicioVacaciones">Fecha Inicio *</label>
+                        <input type="date" id="fechaInicioVacaciones" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="fechaFinVacaciones">Fecha Fin *</label>
+                        <input type="date" id="fechaFinVacaciones" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="observacionesVacaciones">Observaciones (opcional)</label>
+                        <textarea id="observacionesVacaciones" rows="3" placeholder="Notas adicionales..."></textarea>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" onclick="cerrarModalRegistrar()">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">Registrar Vacaciones</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Configuración de API -->
+    <script src="../js/theme.js"></script>
+    <script src="../js/config.js"></script>
+    <script src="../js/admin-vacaciones.js"></script>
+</body>
+</html>
+

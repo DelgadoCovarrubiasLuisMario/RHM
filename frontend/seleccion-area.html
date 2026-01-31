@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seleccionar Área - App RHR</title>
+    <link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+    <div class="container">
+        <div class="area-selection-card">
+            <div class="logo-section">
+                <h1>App RHR</h1>
+                <p>Selecciona el área</p>
+            </div>
+            
+            <div class="area-buttons">
+                <button class="area-btn" onclick="continuar()" style="width: 100%; padding: 20px;">
+                    <div class="area-icon">👥</div>
+                    <div class="area-name">Continuar</div>
+                </button>
+            </div>
+
+            <button class="btn btn-secondary" onclick="volver()">Volver</button>
+        </div>
+    </div>
+
+    <script src="js/theme.js"></script>
+    <script>
+        // Obtener el tipo de usuario desde localStorage
+        const tipoUsuario = localStorage.getItem('tipoUsuario'); // 'admin' o 'empleado'
+        const areaSeleccionada = localStorage.getItem('areaSeleccionada');
+
+        function continuar() {
+            // Ya no se requiere área, continuar directamente
+            // Redirigir según el tipo de usuario
+            if (tipoUsuario === 'admin') {
+                window.location.href = 'admin/menu.html';
+            } else if (tipoUsuario === 'empleado') {
+                window.location.href = 'empleado/registro-asistencia.html';
+            } else {
+                // Si no hay tipo de usuario, volver al login
+                window.location.href = 'index.html';
+            }
+        }
+
+        function volver() {
+            window.location.href = 'index.html';
+        }
+    </script>
+</body>
+</html>
+

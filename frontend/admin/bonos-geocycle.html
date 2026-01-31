@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bonos GeoCycle - Admin - RHM</title>
+    <link rel="stylesheet" href="../styles/main.css">
+    <style>
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid var(--border-color);
+        }
+        .tab-btn {
+            padding: 10px 20px;
+            background: transparent;
+            border: none;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            transition: all 0.3s;
+        }
+        .tab-btn.active {
+            color: var(--primary-color);
+            border-bottom-color: var(--primary-color);
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            font-size: 16px;
+            font-family: inherit;
+        }
+        .form-group textarea {
+            resize: vertical;
+        }
+        .puntos-preview {
+            background: var(--card-bg);
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 10px;
+            border-left: 4px solid var(--primary-color);
+        }
+        .puntos-preview strong {
+            color: var(--primary-color);
+        }
+        .resumen-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .resumen-table th,
+        .resumen-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .resumen-table th {
+            background: var(--card-bg);
+            font-weight: 600;
+        }
+        .resumen-table tr:hover {
+            background: var(--card-bg);
+        }
+        .total-section {
+            margin-top: 30px;
+            padding: 20px;
+            background: var(--card-bg);
+            border-radius: 5px;
+            border: 2px solid var(--primary-color);
+        }
+        .total-section h3 {
+            margin-top: 0;
+            color: var(--primary-color);
+        }
+        .registros-hoy {
+            margin-top: 20px;
+        }
+        .registro-item {
+            padding: 10px;
+            background: var(--card-bg);
+            border-radius: 5px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .btn-icon {
+            background: transparent;
+            border: none;
+            padding: 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 18px;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+        }
+        .btn-icon:hover {
+            transform: scale(1.1);
+        }
+        .btn-edit {
+            color: #007bff;
+            background: rgba(0, 123, 255, 0.1);
+        }
+        .btn-edit:hover {
+            background: rgba(0, 123, 255, 0.2);
+            color: #0056b3;
+        }
+        .btn-delete {
+            color: #dc3545;
+            background: rgba(220, 53, 69, 0.1);
+        }
+        .btn-delete:hover {
+            background: rgba(220, 53, 69, 0.2);
+            color: #c82333;
+        }
+        .historial-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .historial-table th,
+        .historial-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .historial-table th {
+            background: var(--card-bg);
+            font-weight: 600;
+        }
+        .historial-table tr:hover {
+            background: var(--card-bg);
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+        .modal-content {
+            background-color: var(--card-bg);
+            margin: 5% auto;
+            padding: 20px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 500px;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .close {
+            color: #aaa;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .close:hover {
+            color: var(--text-primary);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="admin-card">
+            <!-- Header -->
+            <div class="card-header">
+                <button class="btn-back" onclick="volver()">←</button>
+                <div class="header-content">
+                    <div class="header-icon">🎯</div>
+                    <h1>Bonos GeoCycle</h1>
+                </div>
+            </div>
+
+            <!-- Tabs -->
+            <div class="tabs">
+                <button class="tab-btn active" onclick="cambiarTab('registro')">📝 Registro Diario</button>
+                <button class="tab-btn" onclick="cambiarTab('historial')">📋 Historial</button>
+                <button class="tab-btn" onclick="cambiarTab('resumen')">📊 Resumen Mensual</button>
+            </div>
+
+            <!-- Tab: Registro Diario -->
+            <div id="tab-registro" class="tab-content active">
+                <form id="formRegistro" onsubmit="registrarProduccion(event)">
+                    <div class="form-group">
+                        <label for="fechaRegistro">Fecha:</label>
+                        <input type="date" id="fechaRegistro" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="empleadoRegistro">Nombre del Encargado:</label>
+                        <select id="empleadoRegistro" required>
+                            <option value="">Seleccionar...</option>
+                            <option value="Iker">Iker</option>
+                            <option value="Rodrigo">Rodrigo</option>
+                            <option value="Eliodoro">Eliodoro</option>
+                            <option value="Williams">Williams</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="toneladasRegistro">Toneladas:</label>
+                        <input type="number" id="toneladasRegistro" step="any" min="0" placeholder="Ej: 25.4" inputmode="decimal" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="turnoRegistro">Turno:</label>
+                        <select id="turnoRegistro" required>
+                            <option value="">Seleccionar...</option>
+                            <option value="1">Turno 1</option>
+                            <option value="2">Turno 2</option>
+                            <option value="3">Turno 3</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="comentariosRegistro">Comentarios (opcional):</label>
+                        <textarea id="comentariosRegistro" rows="3" placeholder="Agregar comentarios sobre este registro..."></textarea>
+                    </div>
+                    <div id="puntosPreview" class="puntos-preview" style="display: none;">
+                        <strong>Toneladas calculadas:</strong>
+                        <div id="puntosText"></div>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">Guardar Registro</button>
+                </form>
+
+                <!-- Botón para limpiar registros -->
+                <div style="margin-top: 30px; padding: 15px; background: var(--card-bg); border-radius: 5px; border: 2px solid #dc3545;">
+                    <h3 style="margin-top: 0; color: #dc3545;">⚠️ Limpiar Registros</h3>
+                    <p style="margin-bottom: 15px;">Esta acción eliminará todos los registros de producción de GeoCycle. Esta acción no se puede deshacer.</p>
+                    <button class="btn" onclick="limpiarRegistros()" style="background: #dc3545; color: white; width: 100%;">Limpiar Todos los Registros</button>
+                </div>
+            </div>
+
+            <!-- Tab: Historial -->
+            <div id="tab-historial" class="tab-content">
+                <div id="listaHistorial"></div>
+            </div>
+
+            <!-- Tab: Resumen Mensual -->
+            <div id="tab-resumen" class="tab-content">
+                <div class="filtros-section">
+                    <div class="filtro-group">
+                        <label for="mesResumen">Mes:</label>
+                        <input type="month" id="mesResumen" required>
+                    </div>
+                    <button class="btn btn-primary" onclick="calcularBonos()">Calcular Bonos</button>
+                </div>
+
+                <div id="resultadoBonos" style="display: none;">
+                    <table class="resumen-table">
+                        <thead>
+                            <tr>
+                                <th>Empleado</th>
+                                <th>25-30</th>
+                                <th>30-35</th>
+                                <th>35-40</th>
+                                <th>40+</th>
+                                <th>Bono por persona</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaBonos">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para editar registro -->
+    <div id="modalEditar" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Editar Registro</h2>
+                <span class="close" onclick="cerrarModalEditar()">&times;</span>
+            </div>
+            <form id="formEditar" onsubmit="guardarEdicion(event)">
+                <input type="hidden" id="editarId">
+                <div class="form-group">
+                    <label for="editarFecha">Fecha:</label>
+                    <input type="date" id="editarFecha" required>
+                </div>
+                <div class="form-group">
+                    <label for="editarEmpleado">Nombre del Encargado:</label>
+                    <select id="editarEmpleado" required>
+                        <option value="">Seleccionar...</option>
+                        <option value="Iker">Iker</option>
+                        <option value="Rodrigo">Rodrigo</option>
+                        <option value="Eliodoro">Eliodoro</option>
+                        <option value="Williams">Williams</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="editarToneladas">Toneladas:</label>
+                    <input type="number" id="editarToneladas" step="any" min="0" required>
+                </div>
+                <div class="form-group">
+                    <label for="editarTurno">Turno:</label>
+                    <select id="editarTurno" required>
+                        <option value="">Seleccionar...</option>
+                        <option value="1">Turno 1</option>
+                        <option value="2">Turno 2</option>
+                        <option value="3">Turno 3</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="editarComentarios">Comentarios (opcional):</label>
+                    <textarea id="editarComentarios" rows="3" placeholder="Agregar comentarios sobre este registro..."></textarea>
+                </div>
+                <div class="form-actions" style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button type="button" class="btn btn-secondary" onclick="cerrarModalEditar()" style="flex: 1;">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" style="flex: 1;">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Configuración de API -->
+    <script src="../js/theme.js"></script>
+    <script src="../js/config.js"></script>
+    <script src="../js/admin-bonos-geocycle.js"></script>
+</body>
+</html>
+

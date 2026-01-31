@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Menú Principal - Admin - RHM</title>
+    <link rel="stylesheet" href="../styles/main.css">
+</head>
+<body>
+    <div class="container">
+        <div class="menu-card">
+            <!-- Header -->
+            <div class="card-header">
+                <button class="btn-back" onclick="volver()">←</button>
+                <div class="header-content">
+                    <div class="header-icon">📋</div>
+                    <h1>Menú Principal</h1>
+                </div>
+            </div>
+
+            <!-- Menú de opciones -->
+            <div class="menu-options">
+                <button class="menu-btn" onclick="irA('asistencia')">
+                    <div class="menu-btn-icon">📊</div>
+                    <div class="menu-btn-content">
+                        <div class="menu-btn-title">Asistencia</div>
+                        <div class="menu-btn-description">Ver y gestionar registros de asistencia</div>
+                    </div>
+                    <div class="menu-btn-arrow">→</div>
+                </button>
+
+                <button class="menu-btn" onclick="irA('empleados')">
+                    <div class="menu-btn-icon">👥</div>
+                    <div class="menu-btn-content">
+                        <div class="menu-btn-title">Empleados</div>
+                        <div class="menu-btn-description">Gestionar empleados y descuentos</div>
+                    </div>
+                    <div class="menu-btn-arrow">→</div>
+                </button>
+
+                <button class="menu-btn" onclick="irA('sueldos')">
+                    <div class="menu-btn-icon">💰</div>
+                    <div class="menu-btn-content">
+                        <div class="menu-btn-title">Sueldos</div>
+                        <div class="menu-btn-description">Calcular y gestionar sueldos</div>
+                    </div>
+                    <div class="menu-btn-arrow">→</div>
+                </button>
+
+                <button class="menu-btn" onclick="irA('vacaciones')">
+                    <div class="menu-btn-icon">🏖️</div>
+                    <div class="menu-btn-content">
+                        <div class="menu-btn-title">Vacaciones</div>
+                        <div class="menu-btn-description">Gestionar vacaciones de empleados</div>
+                    </div>
+                    <div class="menu-btn-arrow">→</div>
+                </button>
+
+                <button class="menu-btn" onclick="irA('pagos')">
+                    <div class="menu-btn-icon">💳</div>
+                    <div class="menu-btn-content">
+                        <div class="menu-btn-title">Pagos</div>
+                        <div class="menu-btn-description">Historial de pagos realizados</div>
+                    </div>
+                    <div class="menu-btn-arrow">→</div>
+                </button>
+
+                <button class="menu-btn" onclick="irA('uniformes')">
+                    <div class="menu-btn-icon">👔</div>
+                    <div class="menu-btn-content">
+                        <div class="menu-btn-title">Uniformes y Botas</div>
+                        <div class="menu-btn-description">Control de entregas</div>
+                    </div>
+                    <div class="menu-btn-arrow">→</div>
+                </button>
+
+                <button class="menu-btn" onclick="irA('induccion')">
+                    <div class="menu-btn-icon">📚</div>
+                    <div class="menu-btn-content">
+                        <div class="menu-btn-title">Inducción y Cursos</div>
+                        <div class="menu-btn-description">Lista de empleados con cargos</div>
+                    </div>
+                    <div class="menu-btn-arrow">→</div>
+                </button>
+
+                <button class="menu-btn" onclick="irA('bonos-geocycle')">
+                    <div class="menu-btn-icon">🎯</div>
+                    <div class="menu-btn-content">
+                        <div class="menu-btn-title">Bonos GeoCycle</div>
+                        <div class="menu-btn-description">Registro de producción y cálculo de bonos</div>
+                    </div>
+                    <div class="menu-btn-arrow">→</div>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/theme.js"></script>
+    <script>
+        // Navegar a diferentes secciones
+        function irA(seccion) {
+            switch(seccion) {
+                case 'asistencia':
+                    window.location.href = 'asistencia.html';
+                    break;
+                case 'empleados':
+                    window.location.href = 'empleados.html';
+                    break;
+                case 'sueldos':
+                    window.location.href = 'sueldos.html';
+                    break;
+                case 'pagos':
+                    window.location.href = 'pagos.html';
+                    break;
+                case 'uniformes':
+                    window.location.href = 'uniformes.html';
+                    break;
+                case 'vacaciones':
+                    window.location.href = 'vacaciones.html';
+                    break;
+                case 'induccion':
+                    window.location.href = 'induccion.html';
+                    break;
+                case 'bonos-geocycle':
+                    window.location.href = 'bonos-geocycle.html';
+                    break;
+                case 'nomina':
+                    // window.location.href = 'nomina.html';
+                    alert('Esta sección estará disponible próximamente');
+                    break;
+                default:
+                    console.error('Sección no reconocida:', seccion);
+            }
+        }
+
+        // Volver al login
+        function volver() {
+            localStorage.removeItem('tipoUsuario');
+            localStorage.removeItem('usuario');
+            window.location.href = '../index.html';
+        }
+    </script>
+</body>
+</html>
+

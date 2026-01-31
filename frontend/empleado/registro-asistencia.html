@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registro de Asistencia - RHM</title>
+    <link rel="stylesheet" href="../styles/main.css">
+</head>
+<body>
+    <div class="container">
+        <div class="attendance-card">
+            <!-- Header -->
+            <div class="card-header">
+                <button class="btn-back" onclick="volver()">←</button>
+                <div class="header-content">
+                    <div class="header-icon">👷</div>
+                    <h1>Registro de Asistencia</h1>
+                </div>
+            </div>
+
+            <!-- Formulario de registro -->
+            <form id="registroForm" class="attendance-form">
+                <!-- Fecha -->
+                <div class="form-group">
+                    <label for="fecha">Fecha</label>
+                    <div class="input-with-icon">
+                        <input type="text" id="fecha" readonly>
+                        <span class="input-icon">📅</span>
+                    </div>
+                </div>
+
+                <!-- Hora -->
+                <div class="form-group">
+                    <label for="hora">Hora</label>
+                    <div class="input-with-icon">
+                        <input type="text" id="hora" readonly>
+                        <span class="input-icon">🕐</span>
+                    </div>
+                </div>
+
+                <!-- Código (QR o Manual) -->
+                <div class="form-group">
+                    <label for="codigo">Código o Nombre *</label>
+                    <div class="input-with-icon">
+                        <input type="text" id="codigo" placeholder="Buscar por nombre o código" required autocomplete="off" autofocus>
+                        <button type="button" class="btn-qr" id="btnEscanearQR" onclick="activarEscanner()" title="Escanear código QR">
+                            <span class="qr-icon">📷</span>
+                        </button>
+                    </div>
+                    <div id="listaEmpleados" class="lista-empleados" style="display: none;"></div>
+                    <small class="help-text">Escribe el nombre o código del empleado, o usa el botón 📷 para escanear QR</small>
+                    <div id="qr-reader" class="qr-reader-container" style="display: none;">
+                        <button type="button" id="btnCerrarQR" onclick="cerrarEscanner()" style="position: absolute; top: 10px; right: 10px; background: #dc3545; color: white; border: none; border-radius: 50%; width: 40px; height: 40px; font-size: 24px; cursor: pointer; z-index: 1000; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.3); line-height: 1;" title="Cerrar escáner">×</button>
+                    </div>
+                </div>
+
+                <!-- Movimiento -->
+                <div class="form-group">
+                    <label>Movimiento *</label>
+                    <div class="movimiento-buttons">
+                        <button type="button" class="movimiento-btn" data-movimiento="ENTRADA" onclick="seleccionarMovimiento('ENTRADA')">
+                            INGRESO
+                        </button>
+                        <button type="button" class="movimiento-btn" data-movimiento="SALIDA" onclick="seleccionarMovimiento('SALIDA')">
+                            SALIDA
+                        </button>
+                    </div>
+                    <input type="hidden" id="movimiento" required>
+                </div>
+
+                <!-- Turno -->
+                <div class="form-group">
+                    <label>Turno *</label>
+                    <div class="turno-buttons">
+                        <button type="button" class="turno-btn" data-turno="1" onclick="seleccionarTurno(1)">
+                            Turno 1<br><small>11pm - 7am</small>
+                        </button>
+                        <button type="button" class="turno-btn" data-turno="2" onclick="seleccionarTurno(2)">
+                            Turno 2<br><small>7am - 3pm</small>
+                        </button>
+                        <button type="button" class="turno-btn" data-turno="3" onclick="seleccionarTurno(3)">
+                            Turno 3<br><small>3pm - 11pm</small>
+                        </button>
+                    </div>
+                    <input type="hidden" id="turno" required>
+                </div>
+
+                <!-- Botones de acción -->
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="cancelar()">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Guardar</button>
+                </div>
+            </form>
+
+            <!-- Mensaje de éxito/error -->
+            <div id="mensaje" class="mensaje" style="display: none;"></div>
+        </div>
+    </div>
+
+    <!-- Configuración de API -->
+    <script src="../js/theme.js"></script>
+    <script src="../js/config.js"></script>
+    <!-- Librería para escanear QR (usaremos html5-qrcode) -->
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <script src="../js/registro-asistencia.js"></script>
+</body>
+</html>
+
