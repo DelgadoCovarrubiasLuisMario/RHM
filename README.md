@@ -30,6 +30,20 @@ npm start
 http://localhost:3000
 ```
 
+## 🚀 Despliegue en DigitalOcean
+
+El proyecto está listo para desplegar en DigitalOcean ($4/mes).
+
+**Guía completa:** Ver `GUIA_DIGITALOCEAN.md`
+
+**Despliegue rápido:**
+```bash
+# En el servidor DigitalOcean
+curl -o deploy.sh https://raw.githubusercontent.com/DelgadoCovarrubiasLuisMario/RHM/main/deploy.sh
+chmod +x deploy.sh
+bash deploy.sh
+```
+
 ## Despliegue en DigitalOcean ($4/mes)
 
 DigitalOcean ofrece servidores VPS confiables y económicos.
