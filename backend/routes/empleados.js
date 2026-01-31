@@ -261,7 +261,7 @@ router.put('/:empleado_id', (req, res) => {
     );
 });
 
-// Eliminar empleado (marcar como inactivo)
+// Eliminar empleado y todos sus registros relacionados
 router.delete('/:empleado_id', (req, res) => {
     const { empleado_id } = req.params;
     const db = getDB();
@@ -284,31 +284,69 @@ router.delete('/:empleado_id', (req, res) => {
                 });
             }
 
-            // Marcar como inactivo en lugar de eliminar físicamente
-            db.run(
-                'UPDATE empleados SET activo = 0 WHERE id = ?',
-                [empleado_id],
-                function(deleteErr) {
-                    if (deleteErr) {
-                        return res.status(500).json({ 
-                            success: false, 
-                            message: 'Error al eliminar empleado: ' + deleteErr.message 
+            // Eliminar todos los registros relacionados en orden
+            db.serialize(() => {
+                // 1. Eliminar asistencia
+                db.run('DELETE FROM asistencia WHERE empleado_id = ?', [empleado_id], (err) => {
+                    if (err) console.error('Error al eliminar asistencia:', err);
+                });
+
+                // 2. Eliminar pagos
+                db.run('DELETE FROM pagos WHERE empleado_id = ?', [empleado_id], (err) => {
+                    if (err) console.error('Error al eliminar pagos:', err);
+                });
+
+                // 3. Eliminar producción (bonos)
+                db.run('DELETE FROM produccion_trituracion WHERE empleado_id = ?', [empleado_id], (err) => {
+                    if (err) console.error('Error al eliminar producción:', err);
+                });
+
+                // 4. Eliminar vacaciones
+                db.run('DELETE FROM vacaciones WHERE empleado_id = ?', [empleado_id], (err) => {
+                    if (err) console.error('Error al eliminar vacaciones:', err);
+                });
+
+                // 5. Eliminar uniformes y botas
+                db.run('DELETE FROM uniformes_y_botas WHERE empleado_id = ?', [empleado_id], (err) => {
+                    if (err) console.error('Error al eliminar uniformes:', err);
+                });
+
+                // 6. Eliminar descuentos varios
+                db.run('DELETE FROM descuentos_varios WHERE empleado_id = ?', [empleado_id], (err) => {
+                    if (err) console.error('Error al eliminar descuentos:', err);
+                });
+
+                // 7. Eliminar exámenes médicos
+                db.run('DELETE FROM examenes_medicos WHERE empleado_id = ?', [empleado_id], (err) => {
+                    if (err) console.error('Error al eliminar exámenes médicos:', err);
+                });
+
+                // 8. Finalmente, marcar empleado como inactivo (o eliminar físicamente)
+                db.run(
+                    'UPDATE empleados SET activo = 0 WHERE id = ?',
+                    [empleado_id],
+                    function(deleteErr) {
+                        if (deleteErr) {
+                            return res.status(500).json({ 
+                                success: false, 
+                                message: 'Error al eliminar empleado: ' + deleteErr.message 
+                            });
+                        }
+
+                        if (this.changes === 0) {
+                            return res.status(404).json({ 
+                                success: false, 
+                                message: 'Empleado no encontrado' 
+                            });
+                        }
+
+                        res.json({
+                            success: true,
+                            message: `Empleado ${empleado.nombre} ${empleado.apellido} y todos sus registros eliminados correctamente`
                         });
                     }
-
-                    if (this.changes === 0) {
-                        return res.status(404).json({ 
-                            success: false, 
-                            message: 'Empleado no encontrado' 
-                        });
-                    }
-
-                    res.json({
-                        success: true,
-                        message: `Empleado ${empleado.nombre} ${empleado.apellido} eliminado correctamente`
-                    });
-                }
-            );
+                );
+            });
         }
     );
 });

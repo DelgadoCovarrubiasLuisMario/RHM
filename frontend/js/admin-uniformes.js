@@ -247,12 +247,20 @@ function mostrarEntregas(entregas, area) {
                         <span class="entrega-codigo">Código: ${entrega.codigo_empleado}</span>
                         <span class="entrega-tipo">Tipo: ${tipoText}</span>
                     </div>
+                    <div class="entrega-actions">
+                        <button class="btn-icon btn-edit" onclick="editarEntrega(${entrega.id})" title="Editar">
+                            ✏️
+                        </button>
+                        <button class="btn-icon btn-delete" onclick="eliminarEntrega(${entrega.id})" title="Eliminar">
+                            🗑️
+                        </button>
+                    </div>
+                </div>
+                <div class="entrega-detalles">
                     <div class="entrega-fecha">
                         <span class="fecha-label">Fecha:</span>
                         <span class="fecha-value">${entrega.fecha_entrega}</span>
                     </div>
-                </div>
-                <div class="entrega-detalles">
                     ${entrega.cantidad_uniformes > 0 ? `<span class="detalle-item">Uniformes: ${entrega.cantidad_uniformes}</span>` : ''}
                     ${entrega.cantidad_botas > 0 ? `<span class="detalle-item">Botas: ${entrega.cantidad_botas}</span>` : ''}
                     ${entrega.observaciones ? `<div class="observaciones">Observaciones: ${entrega.observaciones}</div>` : ''}
@@ -273,11 +281,134 @@ function limpiarFiltros() {
     cargarEntregas();
 }
 
+// Editar entrega
+async function editarEntrega(entregaId) {
+    try {
+        const apiURL = window.API_CONFIG ? window.API_CONFIG.getBaseURL() : 'http://localhost:3000';
+        
+        // Obtener datos de la entrega
+        const response = await fetch(`${apiURL}/api/uniformes/listar`);
+        const data = await response.json();
+        
+        if (!data.success) {
+            alert('Error al cargar datos de la entrega');
+            return;
+        }
+        
+        const entrega = data.data.find(e => e.id === entregaId);
+        if (!entrega) {
+            alert('Entrega no encontrada');
+            return;
+        }
+        
+        // Llenar formulario
+        document.getElementById('editarEntregaId').value = entrega.id;
+        document.getElementById('editarTipoEntrega').value = entrega.tipo;
+        
+        // Convertir fecha de DD/MM/YYYY a YYYY-MM-DD
+        const [day, month, year] = entrega.fecha_entrega.split('/');
+        document.getElementById('editarFechaEntrega').value = `${year}-${month}-${day}`;
+        
+        document.getElementById('editarCantidadUniformes').value = entrega.cantidad_uniformes || 0;
+        document.getElementById('editarCantidadBotas').value = entrega.cantidad_botas || 0;
+        document.getElementById('editarObservaciones').value = entrega.observaciones || '';
+        
+        // Mostrar modal
+        document.getElementById('modalEditar').style.display = 'block';
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error al cargar datos de la entrega');
+    }
+}
+
+// Cerrar modal de editar
+function cerrarModalEditar() {
+    document.getElementById('modalEditar').style.display = 'none';
+}
+
+// Guardar edición
+document.getElementById('formEditar')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const entregaId = document.getElementById('editarEntregaId').value;
+    const tipo = document.getElementById('editarTipoEntrega').value;
+    const fechaEntrega = document.getElementById('editarFechaEntrega').value;
+    const cantidadUniformes = parseInt(document.getElementById('editarCantidadUniformes').value) || 0;
+    const cantidadBotas = parseInt(document.getElementById('editarCantidadBotas').value) || 0;
+    const observaciones = document.getElementById('editarObservaciones').value;
+    
+    // Convertir fecha de YYYY-MM-DD a DD/MM/YYYY
+    const [year, month, day] = fechaEntrega.split('-');
+    const fechaFormateada = `${day}/${month}/${year}`;
+    
+    try {
+        const apiURL = window.API_CONFIG ? window.API_CONFIG.getBaseURL() : 'http://localhost:3000';
+        
+        const response = await fetch(`${apiURL}/api/uniformes/${entregaId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                tipo: tipo,
+                fecha_entrega: fechaFormateada,
+                cantidad_uniformes: cantidadUniformes,
+                cantidad_botas: cantidadBotas,
+                observaciones: observaciones || null
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            alert('✅ Entrega actualizada correctamente');
+            cerrarModalEditar();
+            cargarEntregas();
+        } else {
+            alert(`❌ Error: ${data.message || 'Error desconocido'}`);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('❌ Error de conexión. Verifica que el servidor esté corriendo.');
+    }
+});
+
+// Eliminar entrega
+async function eliminarEntrega(entregaId) {
+    if (!confirm('¿Estás seguro de que quieres eliminar esta entrega?')) {
+        return;
+    }
+    
+    try {
+        const apiURL = window.API_CONFIG ? window.API_CONFIG.getBaseURL() : 'http://localhost:3000';
+        
+        const response = await fetch(`${apiURL}/api/uniformes/${entregaId}`, {
+            method: 'DELETE'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            alert('✅ Entrega eliminada correctamente');
+            cargarEntregas();
+        } else {
+            alert(`❌ Error: ${data.message || 'Error desconocido'}`);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('❌ Error de conexión. Verifica que el servidor esté corriendo.');
+    }
+}
+
 // Cerrar modales al hacer clic fuera
 window.onclick = function(event) {
-    const modal = document.getElementById('modalRegistrar');
-    if (event.target === modal) {
+    const modalRegistrar = document.getElementById('modalRegistrar');
+    const modalEditar = document.getElementById('modalEditar');
+    if (event.target === modalRegistrar) {
         cerrarModalRegistrar();
+    }
+    if (event.target === modalEditar) {
+        cerrarModalEditar();
     }
 }
 

@@ -120,6 +120,109 @@ router.get('/empleado/:empleado_id/ultima', (req, res) => {
     });
 });
 
+// Actualizar entrega de uniformes y botas
+router.put('/:entrega_id', (req, res) => {
+    const { entrega_id } = req.params;
+    const { tipo, fecha_entrega, cantidad_uniformes, cantidad_botas, observaciones } = req.body;
+    const db = getDB();
+
+    // Validar campos requeridos
+    if (!tipo || !fecha_entrega) {
+        return res.status(400).json({ 
+            success: false, 
+            message: 'tipo y fecha_entrega son requeridos' 
+        });
+    }
+
+    // Validar tipo
+    if (!['uniforme', 'botas', 'ambos'].includes(tipo)) {
+        return res.status(400).json({ 
+            success: false, 
+            message: 'tipo debe ser: uniforme, botas o ambos' 
+        });
+    }
+
+    // Validar cantidades
+    const cantUniformes = parseInt(cantidad_uniformes) || 0;
+    const cantBotas = parseInt(cantidad_botas) || 0;
+
+    // Verificar que la entrega existe
+    db.get('SELECT id FROM uniformes_y_botas WHERE id = ?', [entrega_id], (err, entrega) => {
+        if (err) {
+            return res.status(500).json({ 
+                success: false, 
+                message: 'Error al verificar entrega: ' + err.message 
+            });
+        }
+
+        if (!entrega) {
+            return res.status(404).json({ 
+                success: false, 
+                message: 'Entrega no encontrada' 
+            });
+        }
+
+        // Actualizar entrega
+        db.run(
+            `UPDATE uniformes_y_botas 
+             SET tipo = ?, fecha_entrega = ?, cantidad_uniformes = ?, cantidad_botas = ?, observaciones = ?
+             WHERE id = ?`,
+            [tipo, fecha_entrega, cantUniformes, cantBotas, observaciones || null, entrega_id],
+            function(updateErr) {
+                if (updateErr) {
+                    return res.status(500).json({ 
+                        success: false, 
+                        message: 'Error al actualizar entrega: ' + updateErr.message 
+                    });
+                }
+
+                if (this.changes === 0) {
+                    return res.status(404).json({ 
+                        success: false, 
+                        message: 'Entrega no encontrada' 
+                    });
+                }
+
+                res.json({
+                    success: true,
+                    message: 'Entrega actualizada correctamente'
+                });
+            }
+        );
+    });
+});
+
+// Eliminar entrega de uniformes y botas
+router.delete('/:entrega_id', (req, res) => {
+    const { entrega_id } = req.params;
+    const db = getDB();
+
+    db.run(
+        'DELETE FROM uniformes_y_botas WHERE id = ?',
+        [entrega_id],
+        function(err) {
+            if (err) {
+                return res.status(500).json({ 
+                    success: false, 
+                    message: 'Error al eliminar entrega: ' + err.message 
+                });
+            }
+
+            if (this.changes === 0) {
+                return res.status(404).json({ 
+                    success: false, 
+                    message: 'Entrega no encontrada' 
+                });
+            }
+
+            res.json({
+                success: true,
+                message: 'Entrega eliminada correctamente'
+            });
+        }
+    );
+});
+
 // Registrar nueva entrega
 router.post('/registrar', (req, res) => {
     const { empleado_id, tipo, fecha_entrega, cantidad_uniformes, cantidad_botas, observaciones } = req.body;
