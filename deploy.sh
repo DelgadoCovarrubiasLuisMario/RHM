@@ -45,6 +45,10 @@ npm install --production
 # Crear directorio de base de datos si no existe
 mkdir -p database
 
+# Inicializar base de datos (crear admin si no existe)
+echo "🔧 Inicializando base de datos..."
+npm run init-db
+
 # Configurar firewall
 echo "🔥 Configurando firewall..."
 ufw allow 3000/tcp
