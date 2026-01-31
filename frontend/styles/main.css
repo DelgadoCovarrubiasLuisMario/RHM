@@ -1467,6 +1467,37 @@ textarea {
     border-bottom: 2px solid var(--border-color);
 }
 
+.entrega-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.btn-icon {
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-icon:hover {
+    transform: scale(1.1);
+}
+
+.btn-edit:hover {
+    background: rgba(37, 99, 235, 0.1);
+}
+
+.btn-delete:hover {
+    background: rgba(239, 68, 68, 0.1);
+}
+
 .entrega-info {
     display: flex;
     flex-direction: column;
