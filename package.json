@@ -7,6 +7,7 @@
     "start": "node backend/server.js",
     "dev": "node backend/server.js",
     "init-db": "node backend/scripts/init-database.js",
+    "export-activos": "node backend/scripts/exportar-empleados-activos.js",
     "pm2:start": "pm2 start backend/server.js --name rhm-app",
     "pm2:restart": "pm2 restart rhm-app",
     "pm2:stop": "pm2 stop rhm-app",

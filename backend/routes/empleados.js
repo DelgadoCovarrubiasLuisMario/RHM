@@ -284,7 +284,7 @@ router.delete('/:empleado_id', (req, res) => {
                 });
             }
 
-            // Eliminar todos los registros relacionados en orden
+            // Eliminar todos los registros relacionados y el empleado físicamente
             db.serialize(() => {
                 // 1. Eliminar asistencia
                 db.run('DELETE FROM asistencia WHERE empleado_id = ?', [empleado_id], (err) => {
@@ -321,9 +321,9 @@ router.delete('/:empleado_id', (req, res) => {
                     if (err) console.error('Error al eliminar exámenes médicos:', err);
                 });
 
-                // 8. Finalmente, marcar empleado como inactivo (o eliminar físicamente)
+                // 8. Eliminar empleado físicamente (no solo marcarlo como inactivo)
                 db.run(
-                    'UPDATE empleados SET activo = 0 WHERE id = ?',
+                    'DELETE FROM empleados WHERE id = ?',
                     [empleado_id],
                     function(deleteErr) {
                         if (deleteErr) {
@@ -342,7 +342,7 @@ router.delete('/:empleado_id', (req, res) => {
 
                         res.json({
                             success: true,
-                            message: `Empleado ${empleado.nombre} ${empleado.apellido} y todos sus registros eliminados correctamente`
+                            message: `Empleado ${empleado.nombre} ${empleado.apellido} y todos sus registros eliminados completamente`
                         });
                     }
                 );

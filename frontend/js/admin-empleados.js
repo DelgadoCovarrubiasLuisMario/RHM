@@ -597,7 +597,7 @@ async function guardarEmpleado(e) {
 
 // Eliminar empleado
 async function eliminarEmpleado(empleadoId, nombreEmpleado) {
-    if (!confirm(`¿Estás seguro de eliminar al empleado "${nombreEmpleado}"?\n\nEsta acción marcará al empleado como inactivo.`)) {
+    if (!confirm(`⚠️ ¿Estás SEGURO de eliminar completamente al empleado "${nombreEmpleado}"?\n\nEsta acción eliminará:\n- El empleado\n- Todos sus registros de asistencia\n- Todos sus pagos\n- Todos sus bonos\n- Todas sus vacaciones\n- Todos sus uniformes y botas\n- Todos sus descuentos\n- Todos sus exámenes médicos\n\n⚠️ Esta acción NO se puede deshacer.`)) {
         return;
     }
 
