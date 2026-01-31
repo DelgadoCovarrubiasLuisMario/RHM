@@ -30,46 +30,43 @@ npm start
 http://localhost:3000
 ```
 
-## Despliegue en Railway (Gratis - Siempre Disponible)
+## Despliegue en DigitalOcean ($4/mes)
 
-Railway ofrece hosting gratuito para que tu app esté siempre disponible sin pagos mensuales.
+DigitalOcean ofrece servidores VPS confiables y económicos.
 
 ### Pasos para desplegar:
 
-1. **Crear cuenta en Railway:**
-   - Ve a https://railway.app
-   - Regístrate con GitHub (gratis)
+1. **Crear cuenta en DigitalOcean:**
+   - Ve a https://www.digitalocean.com
+   - Regístrate y verifica tu email
+   - Agrega método de pago
 
-2. **Conectar tu proyecto:**
-   - Haz clic en "New Project"
-   - Selecciona "Deploy from GitHub repo"
-   - Conecta tu repositorio de GitHub (si no tienes uno, créalo primero)
+2. **Crear Droplet:**
+   - Haz clic en "Create" → "Droplets"
+   - Imagen: Ubuntu 22.04 (LTS)
+   - Plan: Basic ($4/mes - 512 MB RAM, 1 CPU, 10 GB SSD)
+   - Región: La más cercana a tu ubicación
+   - Crear Droplet
 
-3. **Configurar el proyecto:**
-   - Railway detectará automáticamente que es un proyecto Node.js
-   - El archivo `railway.json` ya está configurado
-   - Railway iniciará el despliegue automáticamente
+3. **Conectar al servidor:**
+   - Conecta por SSH: `ssh root@TU_IP_DROPLET`
+   - O usa PuTTY en Windows
 
-4. **Obtener tu URL:**
-   - Una vez desplegado, Railway te dará una URL única
-   - Ejemplo: `https://apprhr-production.up.railway.app`
-   - Esta URL estará siempre disponible
+4. **Desplegar aplicación:**
+   - Sigue la guía completa en `GUIA_DIGITALOCEAN.md`
+   - O ejecuta el script: `bash deploy.sh`
 
-5. **Actualizar el frontend:**
-   - Después del despliegue, actualiza las URLs en los archivos JavaScript del frontend
-   - Cambia `http://localhost:3000` por tu URL de Railway
+5. **Acceder a la aplicación:**
+   - URL: `http://TU_IP_DROPLET:3000`
+   - O configura un dominio (opcional)
 
-### Alternativa: Render (También Gratis)
+### Alternativa: Servidor Local (Gratis)
 
-Si prefieres Render:
-1. Ve a https://render.com
-2. Crea una cuenta gratuita
-3. Selecciona "New Web Service"
-4. Conecta tu repositorio de GitHub
-5. Configuración:
-   - Build Command: (dejar vacío)
-   - Start Command: `npm start`
-   - Environment: Node
+Si prefieres no pagar hosting:
+- Instalar en una PC servidor de la empresa
+- 100% Gratis
+- Datos quedan en la empresa
+- Ver `GUIA_SERVIDOR_LOCAL.md` (si existe)
 
 ## Estructura del Proyecto
 

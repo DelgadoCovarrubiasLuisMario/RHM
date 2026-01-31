@@ -22,4 +22,18 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Archivos temporales y de desarrollo
+*.xlsx
+*.xls
+temp_*
+tmp_*
+*.tmp
+
+# Archivos de Excel de ejemplo
+Bitacora*.xlsx
+PERSONAL*.xlsx
+Prueba*.xlsx
+
+# Scripts de desarrollo (ya no se usan)
+# backend/scripts/ ya eliminado
 
