@@ -175,24 +175,65 @@ function seleccionarTurno(turno) {
 // Solicitar permisos de cámara
 async function solicitarPermisosCamara() {
     try {
-        // Verificar si la API está disponible
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            throw new Error('La API de cámara no está disponible en este navegador');
+        // Verificar si la API está disponible (múltiples formas de verificación)
+        let getUserMedia = null;
+        
+        // Intentar con la API moderna
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            getUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+        } 
+        // Fallback para navegadores antiguos
+        else if (navigator.getUserMedia) {
+            getUserMedia = navigator.getUserMedia.bind(navigator);
+        }
+        // Fallback adicional
+        else if (navigator.webkitGetUserMedia) {
+            getUserMedia = navigator.webkitGetUserMedia.bind(navigator);
+        }
+        // Fallback para navegadores muy antiguos
+        else if (navigator.mozGetUserMedia) {
+            getUserMedia = navigator.mozGetUserMedia.bind(navigator);
+        }
+        
+        if (!getUserMedia) {
+            // Si no hay API disponible, intentar continuar de todas formas
+            // (algunos navegadores pueden tener la API pero no estar expuesta hasta que se use)
+            console.warn('API de cámara no detectada, intentando continuar...');
+            return true; // Permitir que el escáner intente iniciar
         }
         
         // Solicitar permisos explícitamente
-        const stream = await navigator.mediaDevices.getUserMedia({ 
+        const constraints = { 
             video: { 
                 facingMode: "environment" // Preferir cámara trasera
             } 
-        });
+        };
+        
+        let stream;
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            // API moderna
+            stream = await navigator.mediaDevices.getUserMedia(constraints);
+        } else {
+            // API antigua (promisificar)
+            stream = await new Promise((resolve, reject) => {
+                getUserMedia(constraints, resolve, reject);
+            });
+        }
         
         // Detener el stream inmediatamente (solo queríamos los permisos)
-        stream.getTracks().forEach(track => track.stop());
+        if (stream && stream.getTracks) {
+            stream.getTracks().forEach(track => track.stop());
+        }
         
         return true;
     } catch (err) {
         console.error("Error al solicitar permisos de cámara:", err);
+        
+        // Si es un error de API no disponible, intentar continuar de todas formas
+        if (err.message && err.message.includes('no está disponible')) {
+            console.warn('API no disponible, pero intentando iniciar escáner de todas formas...');
+            return true; // Permitir que el escáner intente iniciar
+        }
         
         let mensaje = '❌ Se necesita permiso para usar la cámara.\n\n';
         
@@ -206,7 +247,9 @@ async function solicitarPermisosCamara() {
         } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
             mensaje += 'La cámara está siendo usada por otra aplicación. Cierra otras apps que usen la cámara.';
         } else {
-            mensaje += 'Error: ' + err.message;
+            // Para otros errores, intentar continuar de todas formas
+            console.warn('Error desconocido, pero intentando continuar:', err);
+            return true; // Permitir que el escáner intente iniciar
         }
         
         alert(mensaje);
