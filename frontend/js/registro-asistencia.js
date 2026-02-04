@@ -205,7 +205,6 @@ function activarEscanner() {
     
     html5QrcodeScanner = new Html5Qrcode("qr-scanner-inner");
     
-    // Intentar con cámara trasera primero, si falla intentar frontal
     html5QrcodeScanner.start(
         { facingMode: "environment" }, // Usar cámara trasera
         {
@@ -228,39 +227,9 @@ function activarEscanner() {
             // Error al escanear (ignorar errores continuos)
         }
     ).catch((err) => {
-        console.error("Error al iniciar escáner con cámara trasera:", err);
-        // Intentar con cámara frontal si la trasera falla
-        html5QrcodeScanner.start(
-            { facingMode: "user" }, // Usar cámara frontal
-            {
-                fps: 10,
-                qrbox: { width: 450, height: 450 },
-                aspectRatio: 1.0
-            },
-            (decodedText, decodedResult) => {
-                codigoInput.value = decodedText;
-                const listaEmpleados = document.getElementById('listaEmpleados');
-                if (listaEmpleados) {
-                    listaEmpleados.style.display = 'none';
-                }
-                cerrarEscanner();
-            },
-            (errorMessage) => {
-                // Error al escanear (ignorar errores continuos)
-            }
-        ).catch((err2) => {
-            console.error("Error al iniciar escáner con cámara frontal:", err2);
-            let mensaje = 'Error al activar la cámara.\n\n';
-            if (err2.message && err2.message.includes('Permission denied')) {
-                mensaje += 'Por favor, permite el acceso a la cámara en la configuración del navegador.';
-            } else if (err2.message && err2.message.includes('NotFoundError')) {
-                mensaje += 'No se encontró ninguna cámara disponible.';
-            } else {
-                mensaje += 'Asegúrate de dar permisos de cámara y que tu dispositivo tenga una cámara disponible.';
-            }
-            alert(mensaje);
-            cerrarEscanner();
-        });
+        console.error("Error al iniciar escáner:", err);
+        alert('Error al activar la cámara. Asegúrate de dar permisos de cámara.');
+        cerrarEscanner();
     });
 }
 
