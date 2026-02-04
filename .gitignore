@@ -5,8 +5,6 @@ package-lock.json
 # Database
 database/*.db
 database/*.db-journal
-# Excepto la BD de exportación que sí queremos subir
-!database/rhr_activos.db
 
 # Environment variables
 .env

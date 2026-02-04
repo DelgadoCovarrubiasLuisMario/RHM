@@ -51,10 +51,7 @@ npm run init-db
 
 # Configurar firewall
 echo "🔥 Configurando firewall..."
-ufw allow 22/tcp    # SSH
-ufw allow 80/tcp    # HTTP (para redirección a HTTPS)
-ufw allow 443/tcp   # HTTPS
-ufw allow 3000/tcp  # Node.js (solo localhost, pero por si acaso)
+ufw allow 3000/tcp
 ufw --force enable
 
 # Iniciar o reiniciar aplicación con PM2

@@ -486,9 +486,6 @@ function abrirModalEmpleado() {
     document.getElementById('empleadoId').value = '';
     document.getElementById('empleadoSueldo').value = '2000';
     
-    // Limpiar foto
-    limpiarFotoPreview();
-    
     titulo.textContent = 'Agregar Empleado';
     btnGuardar.textContent = 'Guardar';
     modal.style.display = 'block';
@@ -518,13 +515,6 @@ async function editarEmpleado(empleadoId) {
             document.getElementById('empleadoApellido').value = empleado.apellido;
             document.getElementById('empleadoCargo').value = empleado.cargo && empleado.cargo !== 'Desconocido' ? empleado.cargo : '';
             document.getElementById('empleadoSueldo').value = empleado.sueldo_base || 2000;
-            
-            // Mostrar foto actual si existe
-            if (empleado.foto) {
-                mostrarFotoPreview(empleado.foto);
-            } else {
-                limpiarFotoPreview();
-            }
             
             titulo.textContent = `Editar Empleado - ${empleado.nombre} ${empleado.apellido}`;
             btnGuardar.textContent = 'Actualizar';
@@ -593,13 +583,6 @@ async function guardarEmpleado(e) {
         const data = await response.json();
 
         if (data.success) {
-            // Si hay una foto seleccionada, subirla
-            const inputFoto = document.getElementById('inputFoto');
-            if (inputFoto.files && inputFoto.files.length > 0) {
-                const empleadoIdParaFoto = empleadoId || data.data.id;
-                await subirFoto(empleadoIdParaFoto, inputFoto.files[0]);
-            }
-            
             alert(`✅ ${data.message}`);
             cerrarModalEmpleado();
             cargarEmpleados(); // Recargar lista
@@ -614,7 +597,7 @@ async function guardarEmpleado(e) {
 
 // Eliminar empleado
 async function eliminarEmpleado(empleadoId, nombreEmpleado) {
-    if (!confirm(`⚠️ ¿Estás SEGURO de eliminar completamente al empleado "${nombreEmpleado}"?\n\nEsta acción eliminará:\n- El empleado\n- Todos sus registros de asistencia\n- Todos sus pagos\n- Todos sus bonos\n- Todas sus vacaciones\n- Todos sus uniformes y botas\n- Todos sus descuentos\n- Todos sus exámenes médicos\n\n⚠️ Esta acción NO se puede deshacer.`)) {
+    if (!confirm(`¿Estás seguro de eliminar al empleado "${nombreEmpleado}"?\n\nEsta acción marcará al empleado como inactivo.`)) {
         return;
     }
 

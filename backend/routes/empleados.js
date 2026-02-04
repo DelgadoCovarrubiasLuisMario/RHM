@@ -2,9 +2,6 @@ const express = require('express');
 const router = express.Router();
 const QRCode = require('qrcode');
 const crypto = require('crypto');
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
 const { getDB } = require('../database/db');
 
 // Función para generar código único
@@ -287,7 +284,7 @@ router.delete('/:empleado_id', (req, res) => {
                 });
             }
 
-            // Eliminar todos los registros relacionados y el empleado físicamente
+            // Eliminar todos los registros relacionados en orden
             db.serialize(() => {
                 // 1. Eliminar asistencia
                 db.run('DELETE FROM asistencia WHERE empleado_id = ?', [empleado_id], (err) => {
@@ -324,9 +321,9 @@ router.delete('/:empleado_id', (req, res) => {
                     if (err) console.error('Error al eliminar exámenes médicos:', err);
                 });
 
-                // 8. Eliminar empleado físicamente (no solo marcarlo como inactivo)
+                // 8. Finalmente, marcar empleado como inactivo (o eliminar físicamente)
                 db.run(
-                    'DELETE FROM empleados WHERE id = ?',
+                    'UPDATE empleados SET activo = 0 WHERE id = ?',
                     [empleado_id],
                     function(deleteErr) {
                         if (deleteErr) {
@@ -345,7 +342,7 @@ router.delete('/:empleado_id', (req, res) => {
 
                         res.json({
                             success: true,
-                            message: `Empleado ${empleado.nombre} ${empleado.apellido} y todos sus registros eliminados completamente`
+                            message: `Empleado ${empleado.nombre} ${empleado.apellido} y todos sus registros eliminados correctamente`
                         });
                     }
                 );
