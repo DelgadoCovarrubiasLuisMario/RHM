@@ -49,9 +49,18 @@ mkdir -p database
 echo "🔧 Inicializando base de datos..."
 npm run init-db
 
+# Instalar sqlite3 si no está instalado
+if ! command -v sqlite3 &> /dev/null; then
+    echo "📦 Instalando sqlite3..."
+    apt install -y sqlite3
+fi
+
 # Configurar firewall
 echo "🔥 Configurando firewall..."
-ufw allow 3000/tcp
+ufw allow 22/tcp   # SSH
+ufw allow 80/tcp   # HTTP
+ufw allow 443/tcp  # HTTPS
+ufw allow 3000/tcp # Node.js (backup)
 ufw --force enable
 
 # Iniciar o reiniciar aplicación con PM2
