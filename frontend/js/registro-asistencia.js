@@ -172,93 +172,8 @@ function seleccionarTurno(turno) {
     });
 }
 
-// Solicitar permisos de cámara
-async function solicitarPermisosCamara() {
-    try {
-        // Verificar si la API está disponible (múltiples formas de verificación)
-        let getUserMedia = null;
-        
-        // Intentar con la API moderna
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-            getUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
-        } 
-        // Fallback para navegadores antiguos
-        else if (navigator.getUserMedia) {
-            getUserMedia = navigator.getUserMedia.bind(navigator);
-        }
-        // Fallback adicional
-        else if (navigator.webkitGetUserMedia) {
-            getUserMedia = navigator.webkitGetUserMedia.bind(navigator);
-        }
-        // Fallback para navegadores muy antiguos
-        else if (navigator.mozGetUserMedia) {
-            getUserMedia = navigator.mozGetUserMedia.bind(navigator);
-        }
-        
-        if (!getUserMedia) {
-            // Si no hay API disponible, intentar continuar de todas formas
-            // (algunos navegadores pueden tener la API pero no estar expuesta hasta que se use)
-            console.warn('API de cámara no detectada, intentando continuar...');
-            return true; // Permitir que el escáner intente iniciar
-        }
-        
-        // Solicitar permisos explícitamente
-        const constraints = { 
-            video: { 
-                facingMode: "environment" // Preferir cámara trasera
-            } 
-        };
-        
-        let stream;
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-            // API moderna
-            stream = await navigator.mediaDevices.getUserMedia(constraints);
-        } else {
-            // API antigua (promisificar)
-            stream = await new Promise((resolve, reject) => {
-                getUserMedia(constraints, resolve, reject);
-            });
-        }
-        
-        // Detener el stream inmediatamente (solo queríamos los permisos)
-        if (stream && stream.getTracks) {
-            stream.getTracks().forEach(track => track.stop());
-        }
-        
-        return true;
-    } catch (err) {
-        console.error("Error al solicitar permisos de cámara:", err);
-        
-        // Si es un error de API no disponible, intentar continuar de todas formas
-        if (err.message && err.message.includes('no está disponible')) {
-            console.warn('API no disponible, pero intentando iniciar escáner de todas formas...');
-            return true; // Permitir que el escáner intente iniciar
-        }
-        
-        let mensaje = '❌ Se necesita permiso para usar la cámara.\n\n';
-        
-        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-            mensaje += 'Por favor, permite el acceso a la cámara:\n';
-            mensaje += '1. Haz clic en el ícono de candado en la barra de direcciones\n';
-            mensaje += '2. Activa "Cámara" o "Camera"\n';
-            mensaje += '3. Recarga la página e intenta de nuevo';
-        } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-            mensaje += 'No se encontró ninguna cámara en el dispositivo.';
-        } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
-            mensaje += 'La cámara está siendo usada por otra aplicación. Cierra otras apps que usen la cámara.';
-        } else {
-            // Para otros errores, intentar continuar de todas formas
-            console.warn('Error desconocido, pero intentando continuar:', err);
-            return true; // Permitir que el escáner intente iniciar
-        }
-        
-        alert(mensaje);
-        return false;
-    }
-}
-
 // Activar escáner QR
-async function activarEscanner() {
+function activarEscanner() {
     const qrReaderContainer = document.getElementById('qr-reader');
     const codigoInput = document.getElementById('codigo');
     
@@ -266,12 +181,6 @@ async function activarEscanner() {
         // Si ya existe, detenerlo
         cerrarEscanner();
         return;
-    }
-
-    // Solicitar permisos de cámara primero
-    const tienePermisos = await solicitarPermisosCamara();
-    if (!tienePermisos) {
-        return; // No continuar si no hay permisos
     }
 
     // Crear nuevo escáner
@@ -296,50 +205,63 @@ async function activarEscanner() {
     
     html5QrcodeScanner = new Html5Qrcode("qr-scanner-inner");
     
-    // Intentar primero con cámara trasera, si falla intentar con cualquier cámara
-    const intentarIniciarEscanner = (configCamara) => {
+    // Intentar con cámara trasera primero, si falla intentar frontal
+    html5QrcodeScanner.start(
+        { facingMode: "environment" }, // Usar cámara trasera
+        {
+            fps: 10,
+            qrbox: { width: 450, height: 450 },
+            aspectRatio: 1.0
+        },
+        (decodedText, decodedResult) => {
+            // QR escaneado exitosamente
+            codigoInput.value = decodedText;
+            // Ocultar lista de empleados si está visible
+            const listaEmpleados = document.getElementById('listaEmpleados');
+            if (listaEmpleados) {
+                listaEmpleados.style.display = 'none';
+            }
+            // Detener y cerrar el escáner
+            cerrarEscanner();
+        },
+        (errorMessage) => {
+            // Error al escanear (ignorar errores continuos)
+        }
+    ).catch((err) => {
+        console.error("Error al iniciar escáner con cámara trasera:", err);
+        // Intentar con cámara frontal si la trasera falla
         html5QrcodeScanner.start(
-            configCamara,
+            { facingMode: "user" }, // Usar cámara frontal
             {
                 fps: 10,
                 qrbox: { width: 450, height: 450 },
                 aspectRatio: 1.0
             },
             (decodedText, decodedResult) => {
-                // QR escaneado exitosamente
                 codigoInput.value = decodedText;
-                // Ocultar lista de empleados si está visible
                 const listaEmpleados = document.getElementById('listaEmpleados');
                 if (listaEmpleados) {
                     listaEmpleados.style.display = 'none';
                 }
-                // Detener y cerrar el escáner
                 cerrarEscanner();
             },
             (errorMessage) => {
                 // Error al escanear (ignorar errores continuos)
             }
-        ).catch((err) => {
-            console.error("Error al iniciar escáner:", err);
-            
-            // Si falló con cámara trasera, intentar con cualquier cámara disponible
-            if (configCamara.facingMode === "environment") {
-                console.log("Intentando con cualquier cámara disponible...");
-                intentarIniciarEscanner({ facingMode: "user" }); // Cámara frontal
-            } else if (configCamara.facingMode === "user") {
-                // Si también falla con frontal, intentar sin especificar
-                console.log("Intentando sin especificar cámara...");
-                intentarIniciarEscanner(true); // Cualquier cámara
+        ).catch((err2) => {
+            console.error("Error al iniciar escáner con cámara frontal:", err2);
+            let mensaje = 'Error al activar la cámara.\n\n';
+            if (err2.message && err2.message.includes('Permission denied')) {
+                mensaje += 'Por favor, permite el acceso a la cámara en la configuración del navegador.';
+            } else if (err2.message && err2.message.includes('NotFoundError')) {
+                mensaje += 'No se encontró ninguna cámara disponible.';
             } else {
-                // Si todo falla, mostrar error
-                alert('❌ Error al activar la cámara.\n\nPosibles causas:\n- Permisos de cámara no otorgados\n- Otra aplicación está usando la cámara\n- El dispositivo no tiene cámara\n\nPor favor, verifica los permisos en la configuración del navegador.');
-                cerrarEscanner();
+                mensaje += 'Asegúrate de dar permisos de cámara y que tu dispositivo tenga una cámara disponible.';
             }
+            alert(mensaje);
+            cerrarEscanner();
         });
-    };
-    
-    // Intentar primero con cámara trasera
-    intentarIniciarEscanner({ facingMode: "environment" });
+    });
 }
 
 // Cerrar escáner QR
