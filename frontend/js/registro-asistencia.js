@@ -203,34 +203,89 @@ function activarEscanner() {
         qrReaderContainer.appendChild(scannerDiv);
     }
     
+    // Verificar si estamos en HTTPS o localhost (requerido para cámara)
+    const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    if (!isSecure) {
+        alert('⚠️ Para usar el escáner QR necesitas acceder por HTTPS.\n\nSi estás en el servidor, asegúrate de usar https:// en la URL.');
+        qrReaderContainer.style.display = 'none';
+        return;
+    }
+
     html5QrcodeScanner = new Html5Qrcode("qr-scanner-inner");
     
-    html5QrcodeScanner.start(
-        { facingMode: "environment" }, // Usar cámara trasera
-        {
-            fps: 10,
-            qrbox: { width: 450, height: 450 },
-            aspectRatio: 1.0
-        },
-        (decodedText, decodedResult) => {
-            // QR escaneado exitosamente
-            codigoInput.value = decodedText;
-            // Ocultar lista de empleados si está visible
-            const listaEmpleados = document.getElementById('listaEmpleados');
-            if (listaEmpleados) {
-                listaEmpleados.style.display = 'none';
+    // Intentar primero con cámara trasera, luego frontal
+    function intentarIniciarEscanner(facingMode, esSegundoIntento = false) {
+        // Ajustar tamaño del qrbox según el dispositivo
+        const anchoPantalla = window.innerWidth;
+        const altoPantalla = window.innerHeight;
+        const tamanoQR = Math.min(anchoPantalla * 0.8, altoPantalla * 0.5, 400);
+        
+        html5QrcodeScanner.start(
+            { facingMode: facingMode },
+            {
+                fps: 10,
+                qrbox: { width: tamanoQR, height: tamanoQR },
+                aspectRatio: 1.0,
+                videoConstraints: {
+                    facingMode: facingMode,
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                }
+            },
+            (decodedText, decodedResult) => {
+                // QR escaneado exitosamente
+                codigoInput.value = decodedText;
+                // Ocultar lista de empleados si está visible
+                const listaEmpleados = document.getElementById('listaEmpleados');
+                if (listaEmpleados) {
+                    listaEmpleados.style.display = 'none';
+                }
+                // Detener y cerrar el escáner
+                cerrarEscanner();
+            },
+            (errorMessage) => {
+                // Error al escanear (ignorar errores continuos de escaneo)
             }
-            // Detener y cerrar el escáner
+        ).catch((err) => {
+            console.error("Error al iniciar escáner:", err);
+            
+            // Si falló con cámara trasera y no es el segundo intento, probar con frontal
+            if (facingMode === "environment" && !esSegundoIntento) {
+                console.log("Intentando con cámara frontal...");
+                intentarIniciarEscanner("user", true);
+                return;
+            }
+            
+            // Si ambos fallan, mostrar error detallado
+            let mensajeError = 'Error al activar la cámara.\n\n';
+            
+            if (err.name === 'NotAllowedError' || err.message.includes('permission')) {
+                mensajeError += '❌ Permisos de cámara denegados.\n\n';
+                mensajeError += 'Por favor:\n';
+                mensajeError += '1. Permite el acceso a la cámara en la configuración del navegador\n';
+                mensajeError += '2. Recarga la página\n';
+                mensajeError += '3. Intenta de nuevo';
+            } else if (err.name === 'NotFoundError' || err.message.includes('camera')) {
+                mensajeError += '❌ No se encontró ninguna cámara.\n\n';
+                mensajeError += 'Verifica que tu dispositivo tenga cámara disponible.';
+            } else if (err.message.includes('HTTPS')) {
+                mensajeError += '❌ Se requiere HTTPS para acceder a la cámara.\n\n';
+                mensajeError += 'Accede a la aplicación usando https:// en la URL.';
+            } else {
+                mensajeError += `❌ ${err.message || 'Error desconocido'}\n\n`;
+                mensajeError += 'Intenta:\n';
+                mensajeError += '1. Recargar la página\n';
+                mensajeError += '2. Verificar permisos de cámara\n';
+                mensajeError += '3. Usar otro navegador';
+            }
+            
+            alert(mensajeError);
             cerrarEscanner();
-        },
-        (errorMessage) => {
-            // Error al escanear (ignorar errores continuos)
-        }
-    ).catch((err) => {
-        console.error("Error al iniciar escáner:", err);
-        alert('Error al activar la cámara. Asegúrate de dar permisos de cámara.');
-        cerrarEscanner();
-    });
+        });
+    }
+    
+    // Intentar primero con cámara trasera
+    intentarIniciarEscanner("environment");
 }
 
 // Cerrar escáner QR
