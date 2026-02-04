@@ -486,6 +486,9 @@ function abrirModalEmpleado() {
     document.getElementById('empleadoId').value = '';
     document.getElementById('empleadoSueldo').value = '2000';
     
+    // Limpiar foto
+    limpiarFotoPreview();
+    
     titulo.textContent = 'Agregar Empleado';
     btnGuardar.textContent = 'Guardar';
     modal.style.display = 'block';
@@ -515,6 +518,13 @@ async function editarEmpleado(empleadoId) {
             document.getElementById('empleadoApellido').value = empleado.apellido;
             document.getElementById('empleadoCargo').value = empleado.cargo && empleado.cargo !== 'Desconocido' ? empleado.cargo : '';
             document.getElementById('empleadoSueldo').value = empleado.sueldo_base || 2000;
+            
+            // Mostrar foto actual si existe
+            if (empleado.foto) {
+                mostrarFotoPreview(empleado.foto);
+            } else {
+                limpiarFotoPreview();
+            }
             
             titulo.textContent = `Editar Empleado - ${empleado.nombre} ${empleado.apellido}`;
             btnGuardar.textContent = 'Actualizar';

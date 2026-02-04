@@ -2,6 +2,9 @@ const express = require('express');
 const router = express.Router();
 const QRCode = require('qrcode');
 const crypto = require('crypto');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const { getDB } = require('../database/db');
 
 // Función para generar código único

@@ -15,6 +15,13 @@ app.use(bodyParser.urlencoded({ extended: true }));
 // Servir archivos estáticos del frontend
 app.use(express.static(path.join(__dirname, '../frontend')));
 
+// Servir fotos de empleados
+const fotosDir = path.join(__dirname, '../uploads/fotos');
+if (!fs.existsSync(fotosDir)) {
+    fs.mkdirSync(fotosDir, { recursive: true });
+}
+app.use('/uploads/fotos', express.static(fotosDir));
+
 // Inicializar base de datos
 initDatabase();
 

@@ -112,6 +112,23 @@
                 <form id="formEmpleado">
                     <input type="hidden" id="empleadoId">
                     
+                    <!-- Foto del empleado -->
+                    <div class="form-group">
+                        <label>Foto de Perfil</label>
+                        <div class="foto-upload-container">
+                            <div class="foto-preview" id="fotoPreview">
+                                <img id="fotoPreviewImg" src="" alt="Foto de perfil" style="display: none;">
+                                <div class="foto-placeholder" id="fotoPlaceholder">📷</div>
+                            </div>
+                            <div class="foto-upload-buttons">
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="abrirSelectorFoto()">
+                                    📁 Subir Foto
+                                </button>
+                                <input type="file" id="inputFoto" accept="image/*" capture="environment" style="display: none;" onchange="manejarSeleccionFoto(event)">
+                            </div>
+                        </div>
+                    </div>
+                    
                     <div class="form-group">
                         <label for="empleadoNombre">Nombre *</label>
                         <input type="text" id="empleadoNombre" required>
