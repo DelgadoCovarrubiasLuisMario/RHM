@@ -593,6 +593,13 @@ async function guardarEmpleado(e) {
         const data = await response.json();
 
         if (data.success) {
+            // Si hay una foto seleccionada, subirla
+            const inputFoto = document.getElementById('inputFoto');
+            if (inputFoto.files && inputFoto.files.length > 0) {
+                const empleadoIdParaFoto = empleadoId || data.data.id;
+                await subirFoto(empleadoIdParaFoto, inputFoto.files[0]);
+            }
+            
             alert(`✅ ${data.message}`);
             cerrarModalEmpleado();
             cargarEmpleados(); // Recargar lista
