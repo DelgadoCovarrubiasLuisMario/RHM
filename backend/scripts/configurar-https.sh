@@ -145,19 +145,19 @@ else
         -out /etc/nginx/ssl/rhm.crt \
         -subj "/C=MX/ST=Estado/L=Ciudad/O=RHM/CN=$SERVER_IP"
     
-    # Crear configuración de Nginx con IP
+    # Crear configuración de Nginx con IP (usar _ para aceptar cualquier hostname)
     cat > /etc/nginx/sites-available/rhm << EOF
 server {
     listen 80;
-    server_name $SERVER_IP;
+    server_name $SERVER_IP _;
     
     # Redirigir HTTP a HTTPS
-    return 301 https://\$server_name\$request_uri;
+    return 301 https://\$host\$request_uri;
 }
 
 server {
     listen 443 ssl http2;
-    server_name $SERVER_IP;
+    server_name $SERVER_IP _;
     
     # Certificados SSL autofirmados
     ssl_certificate /etc/nginx/ssl/rhm.crt;
@@ -177,7 +177,7 @@ server {
     
     # Proxy a Node.js
     location / {
-        proxy_pass http://localhost:3000;
+        proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
