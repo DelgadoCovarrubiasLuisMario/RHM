@@ -172,8 +172,50 @@ function seleccionarTurno(turno) {
     });
 }
 
+// Solicitar permisos de cámara
+async function solicitarPermisosCamara() {
+    try {
+        // Verificar si la API está disponible
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            throw new Error('La API de cámara no está disponible en este navegador');
+        }
+        
+        // Solicitar permisos explícitamente
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { 
+                facingMode: "environment" // Preferir cámara trasera
+            } 
+        });
+        
+        // Detener el stream inmediatamente (solo queríamos los permisos)
+        stream.getTracks().forEach(track => track.stop());
+        
+        return true;
+    } catch (err) {
+        console.error("Error al solicitar permisos de cámara:", err);
+        
+        let mensaje = '❌ Se necesita permiso para usar la cámara.\n\n';
+        
+        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+            mensaje += 'Por favor, permite el acceso a la cámara:\n';
+            mensaje += '1. Haz clic en el ícono de candado en la barra de direcciones\n';
+            mensaje += '2. Activa "Cámara" o "Camera"\n';
+            mensaje += '3. Recarga la página e intenta de nuevo';
+        } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+            mensaje += 'No se encontró ninguna cámara en el dispositivo.';
+        } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+            mensaje += 'La cámara está siendo usada por otra aplicación. Cierra otras apps que usen la cámara.';
+        } else {
+            mensaje += 'Error: ' + err.message;
+        }
+        
+        alert(mensaje);
+        return false;
+    }
+}
+
 // Activar escáner QR
-function activarEscanner() {
+async function activarEscanner() {
     const qrReaderContainer = document.getElementById('qr-reader');
     const codigoInput = document.getElementById('codigo');
     
@@ -181,6 +223,12 @@ function activarEscanner() {
         // Si ya existe, detenerlo
         cerrarEscanner();
         return;
+    }
+
+    // Solicitar permisos de cámara primero
+    const tienePermisos = await solicitarPermisosCamara();
+    if (!tienePermisos) {
+        return; // No continuar si no hay permisos
     }
 
     // Crear nuevo escáner
