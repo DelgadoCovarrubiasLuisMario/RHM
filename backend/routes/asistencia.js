@@ -395,6 +395,7 @@ router.get('/listar', (req, res) => {
             a.movimiento,
             a.turno,
             a.area,
+            a.foto,
             e.id as empleado_id,
             e.codigo,
             e.nombre,
