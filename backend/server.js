@@ -163,7 +163,6 @@ function limpiarRegistrosAntiguos() {
 
 // Función para cerrar jornadas automáticamente (proceso periódico)
 function cerrarJornadasPendientes() {
-    const { getDB } = require('./database/db');
     const db = getDB();
     
     if (!db) {
@@ -176,15 +175,16 @@ function cerrarJornadasPendientes() {
     
     if (asistenciaRoutes.cerrarJornadasAutomaticamente) {
         asistenciaRoutes.cerrarJornadasAutomaticamente(db)
-        .then(resultado => {
-            if (resultado.cerradas > 0) {
-                console.log(`✅ ${resultado.cerradas} jornada(s) cerrada(s) automáticamente`);
-                resultado.mensajes.forEach(msg => console.log(`   - ${msg}`));
-            }
-        })
-        .catch(error => {
-            console.error('❌ Error al cerrar jornadas automáticamente:', error);
-        });
+            .then(resultado => {
+                if (resultado.cerradas > 0) {
+                    console.log(`✅ ${resultado.cerradas} jornada(s) cerrada(s) automáticamente`);
+                    resultado.mensajes.forEach(msg => console.log(`   - ${msg}`));
+                }
+            })
+            .catch(error => {
+                console.error('❌ Error al cerrar jornadas automáticamente:', error);
+            });
+    }
 }
 
 // Iniciar servidor

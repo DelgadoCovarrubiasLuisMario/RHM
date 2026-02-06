@@ -282,7 +282,7 @@ router.post('/registrar', async (req, res) => {
     // Buscar empleado por código
     db.get('SELECT id, nombre, apellido FROM empleados WHERE codigo = ? AND activo = 1', 
         [codigo], 
-        async (err, empleado) => {
+        (err, empleado) => {
             if (err) {
                 return res.status(500).json({ 
                     success: false, 
@@ -299,12 +299,17 @@ router.post('/registrar', async (req, res) => {
 
             // Si es una ENTRADA, verificar y cerrar jornadas pendientes del mismo empleado
             if (movimiento === 'ENTRADA' || movimiento === 'INGRESO') {
-                try {
-                    await cerrarJornadasAutomaticamente(db, empleado.id);
-                } catch (error) {
-                    console.error('Error al cerrar jornadas pendientes:', error);
-                    // Continuar con el registro aunque falle el cierre automático
-                }
+                // Cerrar jornadas pendientes (no bloqueante)
+                cerrarJornadasAutomaticamente(db, empleado.id)
+                    .then(resultado => {
+                        if (resultado.cerradas > 0) {
+                            console.log(`✅ ${resultado.cerradas} jornada(s) cerrada(s) automáticamente para ${empleado.nombre} ${empleado.apellido}`);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error al cerrar jornadas pendientes:', error);
+                        // Continuar con el registro aunque falle el cierre automático
+                    });
             }
 
             // Si es una salida, buscar la última entrada para calcular tiempo trabajado
