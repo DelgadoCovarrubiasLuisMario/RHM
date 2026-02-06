@@ -411,7 +411,7 @@ router.delete('/limpiar/registros', (req, res) => {
     });
 });
 
-// Generar tickets de bonos (Excel)
+// Generar tickets de bonos (Excel) - Similar a nómina de pagos
 router.get('/generar-tickets', (req, res) => {
     const { fecha_inicio, fecha_fin } = req.query;
     const db = getDB();
@@ -441,11 +441,12 @@ router.get('/generar-tickets', (req, res) => {
         FROM produccion_trituracion p
         LEFT JOIN empleados e ON p.empleado_id = e.id
         WHERE p.fecha >= ? AND p.fecha <= ?
-        ORDER BY p.fecha DESC, p.turno ASC
+        ORDER BY p.fecha ASC, p.turno ASC
     `;
 
     db.all(query, [fecha_inicio, fecha_fin], (err, registros) => {
         if (err) {
+            console.error('Error al obtener registros:', err);
             return res.status(500).json({
                 success: false,
                 message: 'Error al obtener registros: ' + err.message
@@ -460,8 +461,13 @@ router.get('/generar-tickets', (req, res) => {
         }
 
         try {
-            // Preparar datos para Excel
+            // Preparar datos para Excel con formato similar a nómina
             const datosExcel = [];
+
+            // Título del reporte
+            datosExcel.push(['REPORTE DE BONOS GEOCYCLE']);
+            datosExcel.push([`Período: ${fecha_inicio} al ${fecha_fin}`]);
+            datosExcel.push([]); // Línea en blanco
 
             // Encabezados
             datosExcel.push([
@@ -479,9 +485,26 @@ router.get('/generar-tickets', (req, res) => {
             ]);
 
             // Agregar datos de cada registro
+            let totalToneladas = 0;
+            let totalRango25_30 = 0;
+            let totalRango30_35 = 0;
+            let totalRango35_40 = 0;
+            let totalRango40_plus = 0;
+
             registros.forEach(reg => {
                 const nombreMostrar = reg.nombre_encargado || `${reg.nombre} ${reg.apellido}`.trim() || 'N/A';
                 const codigoMostrar = reg.codigo_empleado || '-';
+                const toneladas = parseFloat(reg.toneladas || 0);
+                const rango25_30 = parseFloat(reg.puntos_rango_25_30 || 0);
+                const rango30_35 = parseFloat(reg.puntos_rango_30_35 || 0);
+                const rango35_40 = parseFloat(reg.puntos_rango_35_40 || 0);
+                const rango40_plus = parseFloat(reg.puntos_rango_40_plus || 0);
+
+                totalToneladas += toneladas;
+                totalRango25_30 += rango25_30;
+                totalRango30_35 += rango30_35;
+                totalRango35_40 += rango35_40;
+                totalRango40_plus += rango40_plus;
 
                 datosExcel.push([
                     reg.id,
@@ -489,14 +512,32 @@ router.get('/generar-tickets', (req, res) => {
                     nombreMostrar,
                     codigoMostrar,
                     `Turno ${reg.turno}`,
-                    parseFloat(reg.toneladas || 0).toFixed(2),
-                    parseFloat(reg.puntos_rango_25_30 || 0).toFixed(2),
-                    parseFloat(reg.puntos_rango_30_35 || 0).toFixed(2),
-                    parseFloat(reg.puntos_rango_35_40 || 0).toFixed(2),
-                    parseFloat(reg.puntos_rango_40_plus || 0).toFixed(2),
+                    toneladas.toFixed(2),
+                    rango25_30.toFixed(2),
+                    rango30_35.toFixed(2),
+                    rango35_40.toFixed(2),
+                    rango40_plus.toFixed(2),
                     reg.comentarios || '-'
                 ]);
             });
+
+            // Línea en blanco
+            datosExcel.push([]);
+
+            // Totales
+            datosExcel.push([
+                'TOTALES',
+                '',
+                '',
+                '',
+                '',
+                totalToneladas.toFixed(2),
+                totalRango25_30.toFixed(2),
+                totalRango30_35.toFixed(2),
+                totalRango35_40.toFixed(2),
+                totalRango40_plus.toFixed(2),
+                ''
+            ]);
 
             // Crear libro de Excel
             const workbook = XLSX.utils.book_new();

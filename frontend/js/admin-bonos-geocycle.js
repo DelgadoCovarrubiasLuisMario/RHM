@@ -467,7 +467,7 @@ function limpiarFiltrosBonos() {
     cargarHistorial();
 }
 
-// Generar tickets de bonos (descargar Excel)
+// Generar tickets de bonos (descargar Excel) - Similar a nómina de pagos
 async function generarTicketsBonos() {
     const fechaInicio = document.getElementById('filtroFechaInicioBonos')?.value || '';
     const fechaFin = document.getElementById('filtroFechaFinBonos')?.value || '';
@@ -494,9 +494,17 @@ async function generarTicketsBonos() {
         
         const response = await fetch(url);
 
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || 'Error al generar tickets');
+        // Verificar si la respuesta es un archivo Excel o un error JSON
+        const contentType = response.headers.get('content-type');
+        
+        if (!response.ok || !contentType || !contentType.includes('application/vnd.openxmlformats')) {
+            // Si no es un archivo Excel, intentar leer como JSON para el error
+            try {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Error al generar tickets');
+            } catch (jsonError) {
+                throw new Error(`Error del servidor (${response.status}): No se pudo generar el archivo`);
+            }
         }
 
         // Obtener el blob del archivo
