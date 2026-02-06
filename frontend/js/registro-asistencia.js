@@ -272,17 +272,22 @@ async function capturarFoto() {
     return new Promise((resolve, reject) => {
         // Solo capturar foto si es ENTRADA o INGRESO
         const movimiento = document.getElementById('movimiento').value;
+        console.log('📸 Intentando capturar foto para movimiento:', movimiento);
+        
         if (movimiento !== 'ENTRADA' && movimiento !== 'INGRESO') {
+            console.log('📸 No se captura foto (no es ENTRADA)');
             resolve(null);
             return;
         }
 
         // Verificar si el navegador soporta getUserMedia
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            console.warn('getUserMedia no está disponible');
+            console.warn('⚠️ getUserMedia no está disponible');
             resolve(null);
             return;
         }
+
+        console.log('📸 Iniciando captura de foto...');
 
         // Crear elemento de video temporal
         videoElement = document.createElement('video');
@@ -304,15 +309,19 @@ async function capturarFoto() {
             } 
         })
         .then(mediaStream => {
+            console.log('✅ Cámara accedida correctamente');
             stream = mediaStream;
             videoElement.srcObject = stream;
             
             // Esperar a que el video esté listo
             videoElement.onloadedmetadata = () => {
+                console.log('📸 Video cargado, reproduciendo...');
                 videoElement.play().then(() => {
+                    console.log('📸 Video reproduciéndose, esperando estabilización...');
                     // Esperar un momento para que la cámara se estabilice
                     setTimeout(() => {
                         try {
+                            console.log('📸 Capturando foto...');
                             // Crear canvas para capturar la foto
                             const canvas = document.createElement('canvas');
                             canvas.width = videoElement.videoWidth;
@@ -322,26 +331,34 @@ async function capturarFoto() {
                             
                             // Convertir a base64
                             const fotoBase64 = canvas.toDataURL('image/jpeg', 0.8);
+                            console.log('✅ Foto capturada correctamente, tamaño:', fotoBase64.length, 'bytes');
                             
                             // Limpiar
                             detenerCamara();
                             
                             resolve(fotoBase64);
                         } catch (error) {
-                            console.error('Error al capturar foto:', error);
+                            console.error('❌ Error al capturar foto:', error);
                             detenerCamara();
                             resolve(null);
                         }
-                    }, 800); // Esperar 800ms para estabilizar
+                    }, 1000); // Esperar 1 segundo para estabilizar
                 }).catch(err => {
-                    console.error('Error al reproducir video:', err);
+                    console.error('❌ Error al reproducir video:', err);
                     detenerCamara();
                     resolve(null);
                 });
             };
+            
+            videoElement.onerror = (err) => {
+                console.error('❌ Error en el elemento video:', err);
+                detenerCamara();
+                resolve(null);
+            };
         })
         .catch(err => {
-            console.error('Error al acceder a la cámara:', err);
+            console.error('❌ Error al acceder a la cámara:', err);
+            alert('⚠️ No se pudo acceder a la cámara. El registro continuará sin foto.');
             detenerCamara();
             // Si falla la cámara, continuar sin foto
             resolve(null);
