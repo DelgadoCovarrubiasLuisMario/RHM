@@ -985,19 +985,21 @@ router.post('/pagar/:empleado_id', (req, res) => {
                                                                  WHERE empleado_id = ? 
                                                                  AND fecha_inicio = ? 
                                                                  AND fecha_fin = ?`,
-                                                [empleado_id, fecha_inicio, fecha_fin],
-                                                (err) => {
-                                                    if (err) {
-                                                        console.error('Error al eliminar descuentos:', err);
-                                                        // Continuar aunque haya error
-                                                    }
+                                                                [empleado_id, fecha_inicio, fecha_fin],
+                                                                (err) => {
+                                                                    if (err) {
+                                                                        console.error('Error al eliminar descuentos:', err);
+                                                                        // Continuar aunque haya error
+                                                                    }
 
-                                                            res.json({
-                                                                success: true,
-                                                                message: `Pago registrado para ${empleado.nombre} ${empleado.apellido}`,
-                                                                pago_id: this.lastID,
-                                                                total_pagado: calculo.total
-                                                            });
+                                                                    res.json({
+                                                                        success: true,
+                                                                        message: `Pago registrado para ${empleado.nombre} ${empleado.apellido}`,
+                                                                        pago_id: this.lastID,
+                                                                        total_pagado: calculo.total
+                                                                    });
+                                                                }
+                                                            );
                                                         }
                                                     );
                                                 }
