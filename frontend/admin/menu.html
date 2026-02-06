@@ -95,8 +95,77 @@
         </div>
     </div>
 
+    <!-- Notificación de cortes automáticos -->
+    <div id="notificacionCortes" class="notificacion-cortes" style="display: none;">
+        <div class="notificacion-header">
+            <span class="notificacion-icon">⚠️</span>
+            <h3>Cortes Automáticos Recientes</h3>
+            <button class="notificacion-cerrar" onclick="cerrarNotificacionCortes()">×</button>
+        </div>
+        <div class="notificacion-body" id="notificacionCortesBody">
+            <div class="loading">Cargando...</div>
+        </div>
+    </div>
+
     <script src="../js/theme.js"></script>
+    <script src="../js/config.js"></script>
     <script>
+        // Cargar notificaciones de cortes automáticos al iniciar
+        document.addEventListener('DOMContentLoaded', function() {
+            cargarCortesAutomaticos();
+        });
+
+        // Cargar cortes automáticos
+        async function cargarCortesAutomaticos() {
+            try {
+                const apiURL = window.API_CONFIG ? window.API_CONFIG.getBaseURL() : 'http://localhost:3000';
+                const response = await fetch(`${apiURL}/api/asistencia/cortes-automaticos`);
+                const data = await response.json();
+
+                if (data.success && data.data && data.data.length > 0) {
+                    mostrarNotificacionCortes(data.data);
+                }
+            } catch (error) {
+                console.error('Error al cargar cortes automáticos:', error);
+            }
+        }
+
+        // Mostrar notificación de cortes automáticos
+        function mostrarNotificacionCortes(cortes) {
+            const notificacion = document.getElementById('notificacionCortes');
+            const body = document.getElementById('notificacionCortesBody');
+            
+            let html = `<p style="margin-bottom: 1rem; color: var(--text-secondary);">
+                Se encontraron <strong>${cortes.length}</strong> empleado(s) con corte automático en las últimas 24 horas:
+            </p>`;
+            
+            html += '<div class="cortes-lista">';
+            cortes.forEach(corte => {
+                html += `
+                    <div class="corte-item">
+                        <div class="corte-empleado">
+                            <strong>${corte.nombre} ${corte.apellido}</strong>
+                            <span class="corte-codigo">Código: ${corte.codigo}</span>
+                        </div>
+                        <div class="corte-detalle">
+                            <span class="corte-fecha">Entrada: ${corte.fecha_entrada} ${corte.hora_entrada}</span>
+                            <span class="corte-fecha">Salida automática: ${corte.fecha_salida} ${corte.hora_salida}</span>
+                            <span class="corte-horas">Horas trabajadas: ${corte.horas_trabajadas}h</span>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            
+            body.innerHTML = html;
+            notificacion.style.display = 'block';
+        }
+
+        // Cerrar notificación
+        function cerrarNotificacionCortes() {
+            document.getElementById('notificacionCortes').style.display = 'none';
+        }
+
         // Navegar a diferentes secciones
         function irA(seccion) {
             switch(seccion) {
