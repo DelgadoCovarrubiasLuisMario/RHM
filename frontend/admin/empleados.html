@@ -133,6 +133,25 @@
                         <input type="number" id="empleadoSueldo" step="0.01" min="0" placeholder="2000" value="2000" required>
                     </div>
                     
+                    <div class="form-group">
+                        <label for="empleadoFoto">Foto del Empleado</label>
+                        <div class="foto-upload-container">
+                            <div class="foto-preview-container" id="fotoPreviewContainer" style="display: none;">
+                                <img id="fotoPreview" src="" alt="Vista previa" class="foto-preview-img">
+                                <button type="button" class="btn btn-danger btn-sm" onclick="eliminarFotoPreview()" style="margin-top: 0.5rem;">🗑️ Eliminar Foto</button>
+                            </div>
+                            <div class="foto-upload-buttons">
+                                <input type="file" id="empleadoFotoInput" accept="image/*" style="display: none;" onchange="manejarSeleccionFoto(event)">
+                                <button type="button" class="btn btn-secondary" onclick="document.getElementById('empleadoFotoInput').click()">
+                                    📁 Seleccionar Archivo
+                                </button>
+                                <button type="button" class="btn btn-secondary" onclick="capturarFotoDesdeCamara()">
+                                    📷 Tomar Foto
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <div class="form-actions">
                         <button type="button" class="btn btn-secondary" onclick="cerrarModalEmpleado()">Cancelar</button>
                         <button type="submit" class="btn btn-primary" id="btnGuardarEmpleado">Guardar</button>

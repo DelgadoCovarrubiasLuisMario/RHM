@@ -115,7 +115,7 @@ router.get('/:empleado_id', (req, res) => {
 
 // Crear nuevo empleado
 router.post('/', (req, res) => {
-    const { nombre, apellido, email, telefono, sueldo_base, cargo } = req.body;
+    const { nombre, apellido, email, telefono, sueldo_base, cargo, foto } = req.body;
     const db = getDB();
 
     // Validar campos requeridos
@@ -140,9 +140,9 @@ router.post('/', (req, res) => {
 
     // Insertar empleado
     db.run(
-        `INSERT INTO empleados (codigo, nombre, apellido, email, telefono, sueldo_base, cargo, activo)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [codigo, nombre.trim(), apellido.trim(), null, null, sueldoBase, cargo || null, 1],
+        `INSERT INTO empleados (codigo, nombre, apellido, email, telefono, sueldo_base, cargo, activo, foto)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [codigo, nombre.trim(), apellido.trim(), null, null, sueldoBase, cargo || null, 1, foto || null],
         function(err) {
             if (err) {
                 if (err.message.includes('UNIQUE constraint failed')) {
@@ -176,7 +176,7 @@ router.post('/', (req, res) => {
 // Actualizar empleado
 router.put('/:empleado_id', (req, res) => {
     const { empleado_id } = req.params;
-    const { nombre, apellido, email, telefono, sueldo_base, cargo, activo } = req.body;
+    const { nombre, apellido, email, telefono, sueldo_base, cargo, activo, foto } = req.body;
     const db = getDB();
 
     // Validar que el empleado existe
@@ -227,6 +227,10 @@ router.put('/:empleado_id', (req, res) => {
             if (activo !== undefined) {
                 updates.push('activo = ?');
                 values.push(activo ? 1 : 0);
+            }
+            if (foto !== undefined) {
+                updates.push('foto = ?');
+                values.push(foto || null);
             }
 
             if (updates.length === 0) {

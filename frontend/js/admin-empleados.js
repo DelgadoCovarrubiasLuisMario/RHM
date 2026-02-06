@@ -485,6 +485,7 @@ function abrirModalEmpleado() {
     form.reset();
     document.getElementById('empleadoId').value = '';
     document.getElementById('empleadoSueldo').value = '2000';
+    eliminarFotoPreview(); // Limpiar foto
     
     titulo.textContent = 'Agregar Empleado';
     btnGuardar.textContent = 'Guardar';
@@ -515,6 +516,13 @@ async function editarEmpleado(empleadoId) {
             document.getElementById('empleadoApellido').value = empleado.apellido;
             document.getElementById('empleadoCargo').value = empleado.cargo && empleado.cargo !== 'Desconocido' ? empleado.cargo : '';
             document.getElementById('empleadoSueldo').value = empleado.sueldo_base || 2000;
+            
+            // Mostrar foto si existe
+            if (empleado.foto) {
+                mostrarFotoPreview(empleado.foto);
+            } else {
+                eliminarFotoPreview();
+            }
             
             titulo.textContent = `Editar Empleado - ${empleado.nombre} ${empleado.apellido}`;
             btnGuardar.textContent = 'Actualizar';
@@ -549,11 +557,18 @@ async function guardarEmpleado(e) {
         return;
     }
 
+    // Obtener foto si hay preview
+    const fotoPreview = document.getElementById('fotoPreview');
+    const fotoBase64 = fotoPreview && fotoPreview.src && fotoPreview.src.startsWith('data:') 
+        ? fotoPreview.src 
+        : null;
+
     const empleadoData = {
         nombre: nombre,
         apellido: apellido,
         cargo: (cargo && cargo.trim()) ? cargo.trim() : null,
-        sueldo_base: sueldoNum
+        sueldo_base: sueldoNum,
+        foto: fotoBase64
     };
 
     try {
@@ -592,6 +607,179 @@ async function guardarEmpleado(e) {
     } catch (error) {
         console.error('Error:', error);
         alert('❌ Error de conexión. Verifica que el servidor esté corriendo.');
+    }
+}
+
+// Variable global para almacenar la foto actual
+let fotoActualBase64 = null;
+
+// Manejar selección de archivo
+function manejarSeleccionFoto(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Validar que sea una imagen
+    if (!file.type.startsWith('image/')) {
+        alert('❌ Por favor selecciona un archivo de imagen');
+        return;
+    }
+
+    // Validar tamaño (máximo 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+        alert('❌ La imagen es demasiado grande. Máximo 5MB');
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const base64 = e.target.result;
+        mostrarFotoPreview(base64);
+    };
+    reader.onerror = function() {
+        alert('❌ Error al leer el archivo');
+    };
+    reader.readAsDataURL(file);
+}
+
+// Capturar foto desde cámara
+function capturarFotoDesdeCamara() {
+    // Verificar si el navegador soporta getUserMedia
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert('⚠️ Tu navegador no soporta la captura de fotos. Por favor usa "Seleccionar Archivo"');
+        return;
+    }
+
+    // Crear video temporal
+    const video = document.createElement('video');
+    video.style.position = 'fixed';
+    video.style.top = '-9999px';
+    video.style.width = '640px';
+    video.style.height = '480px';
+    video.autoplay = true;
+    video.playsInline = true;
+    video.muted = true;
+    document.body.appendChild(video);
+
+    // Obtener acceso a la cámara
+    navigator.mediaDevices.getUserMedia({ 
+        video: { 
+            facingMode: 'user', // Cámara frontal
+            width: { ideal: 640 },
+            height: { ideal: 480 }
+        } 
+    })
+    .then(stream => {
+        video.srcObject = stream;
+        
+        // Crear modal para mostrar la cámara
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+        `;
+        
+        const videoContainer = document.createElement('div');
+        videoContainer.style.cssText = `
+            position: relative;
+            width: 90%;
+            max-width: 640px;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+        `;
+        
+        const videoDisplay = document.createElement('video');
+        videoDisplay.srcObject = stream;
+        videoDisplay.autoplay = true;
+        videoDisplay.playsInline = true;
+        videoDisplay.style.cssText = 'width: 100%; height: auto; display: block;';
+        
+        const buttonsContainer = document.createElement('div');
+        buttonsContainer.style.cssText = `
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+            justify-content: center;
+        `;
+        
+        const btnCapturar = document.createElement('button');
+        btnCapturar.textContent = '📷 Capturar';
+        btnCapturar.className = 'btn btn-primary';
+        btnCapturar.style.cssText = 'padding: 1rem 2rem; font-size: 1.2rem;';
+        
+        const btnCancelar = document.createElement('button');
+        btnCancelar.textContent = '❌ Cancelar';
+        btnCancelar.className = 'btn btn-secondary';
+        btnCancelar.style.cssText = 'padding: 1rem 2rem; font-size: 1.2rem;';
+        
+        videoContainer.appendChild(videoDisplay);
+        buttonsContainer.appendChild(btnCapturar);
+        buttonsContainer.appendChild(btnCancelar);
+        modal.appendChild(videoContainer);
+        modal.appendChild(buttonsContainer);
+        document.body.appendChild(modal);
+        
+        // Capturar foto
+        btnCapturar.onclick = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = videoDisplay.videoWidth;
+            canvas.height = videoDisplay.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(videoDisplay, 0, 0);
+            
+            const fotoBase64 = canvas.toDataURL('image/jpeg', 0.8);
+            mostrarFotoPreview(fotoBase64);
+            
+            // Limpiar
+            stream.getTracks().forEach(track => track.stop());
+            document.body.removeChild(modal);
+            document.body.removeChild(video);
+        };
+        
+        // Cancelar
+        btnCancelar.onclick = () => {
+            stream.getTracks().forEach(track => track.stop());
+            document.body.removeChild(modal);
+            document.body.removeChild(video);
+        };
+    })
+    .catch(err => {
+        console.error('Error al acceder a la cámara:', err);
+        alert('❌ No se pudo acceder a la cámara. Asegúrate de dar permisos de cámara.');
+        document.body.removeChild(video);
+    });
+}
+
+// Mostrar preview de foto
+function mostrarFotoPreview(base64) {
+    const container = document.getElementById('fotoPreviewContainer');
+    const img = document.getElementById('fotoPreview');
+    
+    img.src = base64;
+    container.style.display = 'block';
+    fotoActualBase64 = base64;
+}
+
+// Eliminar preview de foto
+function eliminarFotoPreview() {
+    const container = document.getElementById('fotoPreviewContainer');
+    const img = document.getElementById('fotoPreview');
+    const input = document.getElementById('empleadoFotoInput');
+    
+    img.src = '';
+    container.style.display = 'none';
+    fotoActualBase64 = null;
+    if (input) {
+        input.value = '';
     }
 }
 
