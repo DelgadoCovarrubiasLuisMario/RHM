@@ -220,8 +220,41 @@ router.get('/calcular/:empleado_id', (req, res) => {
 
                                         const vacacionesArray = vacaciones || [];
 
-                                        // Procesar registros para calcular sueldo
-                                        const calculo = calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, fechaFin, descuentosVarios, vacacionesArray, empleado.nombre, empleado.apellido);
+                                        // Obtener cortes automáticos del empleado para el período
+                                        db.all(
+                                            `SELECT fecha, asistencia_id, accion_admin 
+                                             FROM cortes_automaticos 
+                                             WHERE empleado_id = ? 
+                                             AND fecha >= ? 
+                                             AND fecha <= ? 
+                                             AND procesado = 1`,
+                                            [empleado_id, fechaInicio, fechaFin],
+                                            (err, cortes) => {
+                                                if (err) {
+                                                    console.error('Error al obtener cortes automáticos:', err);
+                                                }
+                                                
+                                                const cortesMap = {};
+                                                (cortes || []).forEach(corte => {
+                                                    cortesMap[corte.fecha] = corte.accion_admin;
+                                                });
+
+                                                // Procesar registros para calcular sueldo
+                                                const calculo = calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, fechaFin, descuentosVarios, vacacionesArray, empleado.nombre, empleado.apellido, empleado_id, cortesMap);
+                                                
+                                                res.json({
+                                                    success: true,
+                                                    empleado: `${empleado.nombre} ${empleado.apellido}`,
+                                                    periodo: {
+                                                        fecha_inicio: fechaInicio,
+                                                        fecha_fin: fechaFin
+                                                    },
+                                                    sueldo_base: sueldoBase,
+                                                    pago_por_hora: pagoPorHora,
+                                                    ...calculo
+                                                });
+                                            }
+                                        );
                             
                                         res.json({
                                             success: true,
@@ -252,7 +285,7 @@ function esPatron(nombre, apellido) {
 }
 
 // Función principal de cálculo
-function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, fechaFin, descuentosVarios = 0, vacaciones = [], nombreEmpleado = '', apellidoEmpleado = '') {
+function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, fechaFin, descuentosVarios = 0, vacaciones = [], nombreEmpleado = '', apellidoEmpleado = '', empleadoId = null, cortesAutomaticos = {}) {
     // Si es patron, retornar $6000 fijos (sin descuentos de faltas, solo descuentos varios)
     if (esPatron(nombreEmpleado, apellidoEmpleado)) {
         return {
@@ -361,30 +394,20 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
             
             // Verificar si hay un corte automático procesado para este día
             // Si el admin eligió "eliminar", solo contar 8 horas en lugar de 9.5
-            db.get(
-                `SELECT accion_admin FROM cortes_automaticos 
-                 WHERE empleado_id = ? AND fecha = ? AND asistencia_id = ? AND procesado = 1`,
-                [empleado_id, fecha, salida.id],
-                (err, corte) => {
-                    if (!err && corte && corte.accion_admin === 'eliminar') {
-                        // Si el admin eligió eliminar horas extra, solo contar 8 horas
-                        horasTrabajadas = Math.min(horasTrabajadas, 8);
-                    }
-                    
-                    procesarHorasDia(horasTrabajadas);
-                }
-            );
+            if (cortesAutomaticos[fecha] === 'eliminar') {
+                // Si el admin eligió eliminar horas extra, solo contar 8 horas
+                horasTrabajadas = Math.min(horasTrabajadas, 8);
+            }
             
-            function procesarHorasDia(horasTrabajadas) {
-                // Solo procesar si hay horas trabajadas (aunque sean pocas, como 1 hora)
-                if (horasTrabajadas > 0) {
-                    if (!esDomingoDia) {
-                        // Contar como día trabajado (para calcular faltas)
-                        diasTrabajados++;
-                        
-                        // Días normales: primeras 8 horas son normales, el resto extras
-                        let horasNormalesDia = Math.min(horasTrabajadas, 8);
-                        let horasExtrasDia = Math.max(0, horasTrabajadas - 8);
+            // Solo procesar si hay horas trabajadas (aunque sean pocas, como 1 hora)
+            if (horasTrabajadas > 0) {
+                if (!esDomingoDia) {
+                    // Contar como día trabajado (para calcular faltas)
+                    diasTrabajados++;
+                    
+                    // Días normales: primeras 8 horas son normales, el resto extras
+                    let horasNormalesDia = Math.min(horasTrabajadas, 8);
+                    let horasExtrasDia = Math.max(0, horasTrabajadas - 8);
                     
                     horasNormalesTotales += horasNormalesDia;
                     
@@ -396,6 +419,16 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
                             es_domingo: false
                         });
                     }
+                } else {
+                    // Domingo: todas las horas son extras
+                    diasTrabajados++;
+                    horasExtrasSemanales += horasTrabajadas;
+                    horasExtrasPorDia.push({
+                        fecha,
+                        horas_extras: horasTrabajadas,
+                        es_domingo: true
+                    });
+                }
                     
                     // Calcular horas turno por día
                     let horasTurnoDia = 0;
