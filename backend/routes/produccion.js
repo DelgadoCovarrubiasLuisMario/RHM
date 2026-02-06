@@ -290,7 +290,122 @@ router.post('/calcular-bonos', (req, res) => {
     });
 });
 
-// Generar tickets de bonos (Excel) - DEBE estar ANTES de /:id
+// Generar tickets de bonos desde cálculo de bonos (Excel) - DEBE estar ANTES de /:id
+router.post('/generar-tickets-bonos', (req, res) => {
+    const { mes, empleados } = req.body;
+    const db = getDB();
+
+    if (!mes || !empleados || !Array.isArray(empleados) || empleados.length === 0) {
+        return res.status(400).json({
+            success: false,
+            message: 'mes y empleados son requeridos'
+        });
+    }
+
+    try {
+        // Preparar datos para Excel con formato similar a nómina
+        const datosExcel = [];
+
+        // Título del reporte
+        datosExcel.push(['REPORTE DE BONOS GEOCYCLE']);
+        datosExcel.push([`Mes: ${mes}`]);
+        datosExcel.push([]); // Línea en blanco
+
+        // Encabezados
+        datosExcel.push([
+            'Equipo',
+            'Toneladas Rango 25-30',
+            'Toneladas Rango 30-35',
+            'Toneladas Rango 35-40',
+            'Toneladas Rango 40+',
+            'Bono por Persona'
+        ]);
+
+        // Agregar datos de cada empleado/equipo
+        let totalTon25_30 = 0;
+        let totalTon30_35 = 0;
+        let totalTon35_40 = 0;
+        let totalTon40_plus = 0;
+        let totalBono = 0;
+
+        empleados.forEach(emp => {
+            const ton25_30 = parseFloat(emp.toneladas_25_30 || 0);
+            const ton30_35 = parseFloat(emp.toneladas_30_35 || 0);
+            const ton35_40 = parseFloat(emp.toneladas_35_40 || 0);
+            const ton40_plus = parseFloat(emp.toneladas_40_plus || 0);
+            const bonoPorPersona = parseFloat(emp.bono_total_individual || 0);
+
+            totalTon25_30 += ton25_30;
+            totalTon30_35 += ton30_35;
+            totalTon35_40 += ton35_40;
+            totalTon40_plus += ton40_plus;
+            totalBono += bonoPorPersona;
+
+            const nombreEquipo = emp.nombre_encargado || emp.nombre || 'N/A';
+            const nombreMostrar = nombreEquipo ? `Equipo de ${nombreEquipo}` : `${emp.nombre || ''} ${emp.apellido || ''}`.trim() || 'N/A';
+
+            datosExcel.push([
+                nombreMostrar,
+                ton25_30.toFixed(2),
+                ton30_35.toFixed(2),
+                ton35_40.toFixed(2),
+                ton40_plus.toFixed(2),
+                `$${bonoPorPersona.toFixed(2)}`
+            ]);
+        });
+
+        // Línea en blanco
+        datosExcel.push([]);
+
+        // Totales
+        datosExcel.push([
+            'TOTALES',
+            totalTon25_30.toFixed(2),
+            totalTon30_35.toFixed(2),
+            totalTon35_40.toFixed(2),
+            totalTon40_plus.toFixed(2),
+            `$${totalBono.toFixed(2)}`
+        ]);
+
+        // Crear libro de Excel
+        const workbook = XLSX.utils.book_new();
+        const worksheet = XLSX.utils.aoa_to_sheet(datosExcel);
+
+        // Ajustar ancho de columnas
+        const columnWidths = [
+            { wch: 25 }, // Equipo
+            { wch: 20 }, // Toneladas Rango 25-30
+            { wch: 20 }, // Toneladas Rango 30-35
+            { wch: 20 }, // Toneladas Rango 35-40
+            { wch: 20 }, // Toneladas Rango 40+
+            { wch: 18 }  // Bono por Persona
+        ];
+        worksheet['!cols'] = columnWidths;
+
+        // Agregar hoja al libro
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Tickets Bonos');
+
+        // Generar nombre de archivo
+        const mesFormato = mes.replace(/\//g, '');
+        const nombreArchivo = `tickets_bonos_${mesFormato}.xlsx`;
+
+        // Generar buffer del archivo
+        const excelBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+        // Enviar archivo
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`);
+        res.send(excelBuffer);
+    } catch (error) {
+        console.error('Error al generar archivo Excel:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Error al generar archivo de tickets: ' + error.message
+        });
+    }
+});
+
+// Generar tickets de bonos (Excel) - DEBE estar ANTES de /:id (DEPRECADO - usar /generar-tickets-bonos)
 router.get('/generar-tickets', (req, res) => {
     const { fecha_inicio, fecha_fin } = req.query;
     const db = getDB();

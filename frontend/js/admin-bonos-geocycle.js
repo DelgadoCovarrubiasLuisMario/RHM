@@ -182,14 +182,22 @@ async function calcularBonos() {
     }
 }
 
+// Variable global para almacenar los resultados de bonos calculados
+let resultadosBonosActuales = null;
+
 // Mostrar resultados de bonos (INDIVIDUAL POR EMPLEADO)
 function mostrarResultadosBonos(resultados) {
     const tabla = document.getElementById('tablaBonos');
     const resultadoDiv = document.getElementById('resultadoBonos');
+    const btnGenerar = document.getElementById('btnGenerarTicketsBonos');
+
+    // Guardar resultados para generar tickets
+    resultadosBonosActuales = resultados;
 
     if (!resultados || !resultados.empleados || resultados.empleados.length === 0) {
         tabla.innerHTML = '<tr><td colspan="6">No hay datos para este mes</td></tr>';
         resultadoDiv.style.display = 'block';
+        btnGenerar.style.display = 'none';
         return;
     }
 
@@ -216,6 +224,7 @@ function mostrarResultadosBonos(resultados) {
     }).join('');
 
     resultadoDiv.style.display = 'block';
+    btnGenerar.style.display = 'inline-block';
 }
 
 
@@ -460,20 +469,11 @@ async function eliminarRegistro(id) {
     }
 }
 
-// Limpiar filtros de bonos
-function limpiarFiltrosBonos() {
-    document.getElementById('filtroFechaInicioBonos').value = '';
-    document.getElementById('filtroFechaFinBonos').value = '';
-    cargarHistorial();
-}
 
-// Generar tickets de bonos (descargar Excel) - Similar a nómina de pagos
+// Generar tickets de bonos (descargar Excel) - Basado en cálculo de bonos
 async function generarTicketsBonos() {
-    const fechaInicio = document.getElementById('filtroFechaInicioBonos')?.value || '';
-    const fechaFin = document.getElementById('filtroFechaFinBonos')?.value || '';
-
-    if (!fechaInicio || !fechaFin) {
-        alert('⚠️ Por favor selecciona un rango de fechas (Desde y Hasta)');
+    if (!resultadosBonosActuales || !resultadosBonosActuales.empleados || resultadosBonosActuales.empleados.length === 0) {
+        alert('⚠️ Primero debes calcular los bonos para el mes seleccionado');
         return;
     }
 
@@ -483,16 +483,17 @@ async function generarTicketsBonos() {
     btnGenerar.textContent = '⏳ Generando...';
 
     try {
-        // Convertir fechas de YYYY-MM-DD a DD/MM/YYYY
-        const [añoInicio, mesInicio, diaInicio] = fechaInicio.split('-');
-        const [añoFin, mesFin, diaFin] = fechaFin.split('-');
-        const fechaInicioFormato = `${diaInicio}/${mesInicio}/${añoInicio}`;
-        const fechaFinFormato = `${diaFin}/${mesFin}/${añoFin}`;
-        
         const apiURL = getAPIBase();
-        const url = `${apiURL}/api/produccion/generar-tickets?fecha_inicio=${encodeURIComponent(fechaInicioFormato)}&fecha_fin=${encodeURIComponent(fechaFinFormato)}`;
+        const url = `${apiURL}/api/produccion/generar-tickets-bonos`;
         
-        const response = await fetch(url);
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                mes: resultadosBonosActuales.mes,
+                empleados: resultadosBonosActuales.empleados
+            })
+        });
 
         // Verificar si la respuesta es un archivo Excel o un error JSON
         const contentType = response.headers.get('content-type');

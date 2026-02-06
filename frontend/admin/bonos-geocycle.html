@@ -266,21 +266,6 @@
 
             <!-- Tab: Historial -->
             <div id="tab-historial" class="tab-content">
-                <div class="filtros-section" style="margin-bottom: 20px;">
-                    <div class="filtro-group">
-                        <label for="filtroFechaInicioBonos">Desde:</label>
-                        <input type="date" id="filtroFechaInicioBonos">
-                    </div>
-                    <div class="filtro-group">
-                        <label for="filtroFechaFinBonos">Hasta:</label>
-                        <input type="date" id="filtroFechaFinBonos">
-                    </div>
-                    <button class="btn btn-primary" onclick="cargarHistorial()">Buscar</button>
-                    <button class="btn btn-secondary" onclick="limpiarFiltrosBonos()">Limpiar</button>
-                    <button class="btn btn-success" onclick="generarTicketsBonos()" id="btnGenerarTicketsBonos" style="margin-left: auto;">
-                        🎫 Generar Tickets
-                    </button>
-                </div>
                 <div id="listaHistorial"></div>
             </div>
 
@@ -292,6 +277,9 @@
                         <input type="month" id="mesResumen" required>
                     </div>
                     <button class="btn btn-primary" onclick="calcularBonos()">Calcular Bonos</button>
+                    <button class="btn btn-success" onclick="generarTicketsBonos()" id="btnGenerarTicketsBonos" style="display: none; margin-left: auto;">
+                        🎫 Generar Tickets
+                    </button>
                 </div>
 
                 <div id="resultadoBonos" style="display: none;">
