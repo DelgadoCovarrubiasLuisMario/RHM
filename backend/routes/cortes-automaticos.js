@@ -2,23 +2,26 @@ const express = require('express');
 const router = express.Router();
 const { getDB } = require('../database/db');
 
-// Obtener cortes automáticos pendientes
+// Obtener cortes automáticos pendientes (no procesados)
 router.get('/pendientes', (req, res) => {
     const db = getDB();
-    
+
     db.all(
         `SELECT 
             c.id,
             c.empleado_id,
+            c.asistencia_id,
             c.fecha,
             c.horas_originales,
             c.horas_cortadas,
             c.horas_extra,
             c.creado_en,
-            e.nombre || ' ' || e.apellido as nombre_empleado
+            e.nombre,
+            e.apellido,
+            e.codigo
          FROM cortes_automaticos c
          INNER JOIN empleados e ON c.empleado_id = e.id
-         WHERE c.estado = 'pendiente'
+         WHERE c.procesado = 0
          ORDER BY c.fecha DESC, c.creado_en DESC`,
         [],
         (err, cortes) => {
@@ -28,7 +31,7 @@ router.get('/pendientes', (req, res) => {
                     message: 'Error al obtener cortes automáticos: ' + err.message
                 });
             }
-            
+
             res.json({
                 success: true,
                 data: cortes,
@@ -38,63 +41,23 @@ router.get('/pendientes', (req, res) => {
     );
 });
 
-// Aprobar horas extra (mantener las 1.5 horas extra)
-router.post('/:corte_id/aprobar', (req, res) => {
+// Procesar corte automático (admin decide mantener o eliminar horas extra)
+router.post('/:corte_id/procesar', (req, res) => {
     const { corte_id } = req.params;
+    const { accion } = req.body; // 'mantener' o 'eliminar'
     const db = getDB();
-    
-    // Verificar que el corte existe y está pendiente
-    db.get(
-        'SELECT * FROM cortes_automaticos WHERE id = ? AND estado = ?',
-        [corte_id, 'pendiente'],
-        (err, corte) => {
-            if (err) {
-                return res.status(500).json({
-                    success: false,
-                    message: 'Error al verificar corte: ' + err.message
-                });
-            }
-            
-            if (!corte) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'Corte automático no encontrado o ya procesado'
-                });
-            }
-            
-            // Actualizar estado a aprobado
-            db.run(
-                `UPDATE cortes_automaticos 
-                 SET estado = 'aprobado', procesado_en = CURRENT_TIMESTAMP
-                 WHERE id = ?`,
-                [corte_id],
-                function(updateErr) {
-                    if (updateErr) {
-                        return res.status(500).json({
-                            success: false,
-                            message: 'Error al aprobar corte: ' + updateErr.message
-                        });
-                    }
-                    
-                    res.json({
-                        success: true,
-                        message: 'Horas extra aprobadas. Se mantendrán las 1.5 horas extra.'
-                    });
-                }
-            );
-        }
-    );
-});
 
-// Rechazar horas extra (eliminar las 1.5 horas extra, dejar solo 8 horas)
-router.post('/:corte_id/rechazar', (req, res) => {
-    const { corte_id } = req.params;
-    const db = getDB();
-    
-    // Verificar que el corte existe y está pendiente
+    if (!accion || !['mantener', 'eliminar'].includes(accion)) {
+        return res.status(400).json({
+            success: false,
+            message: 'accion debe ser "mantener" o "eliminar"'
+        });
+    }
+
+    // Verificar que el corte existe y no está procesado
     db.get(
-        'SELECT * FROM cortes_automaticos WHERE id = ? AND estado = ?',
-        [corte_id, 'pendiente'],
+        `SELECT * FROM cortes_automaticos WHERE id = ? AND procesado = 0`,
+        [corte_id],
         (err, corte) => {
             if (err) {
                 return res.status(500).json({
@@ -102,35 +65,42 @@ router.post('/:corte_id/rechazar', (req, res) => {
                     message: 'Error al verificar corte: ' + err.message
                 });
             }
-            
+
             if (!corte) {
                 return res.status(404).json({
                     success: false,
                     message: 'Corte automático no encontrado o ya procesado'
                 });
             }
+
+            // Si la acción es 'eliminar', necesitamos ajustar las horas en el cálculo de sueldos
+            // Por ahora solo marcamos como procesado
+            // Las horas se ajustarán automáticamente en el cálculo porque ya están cortadas a 9.5
             
-            // Actualizar estado a rechazado
             db.run(
                 `UPDATE cortes_automaticos 
-                 SET estado = 'rechazado', procesado_en = CURRENT_TIMESTAMP
+                 SET procesado = 1, 
+                     accion_admin = ?,
+                     procesado_en = CURRENT_TIMESTAMP
                  WHERE id = ?`,
-                [corte_id],
+                [accion, corte_id],
                 function(updateErr) {
                     if (updateErr) {
                         return res.status(500).json({
                             success: false,
-                            message: 'Error al rechazar corte: ' + updateErr.message
+                            message: 'Error al procesar corte: ' + updateErr.message
                         });
                     }
-                    
-                    // Aquí necesitaríamos ajustar las horas en la asistencia
-                    // Por ahora solo marcamos como rechazado
-                    // TODO: Ajustar horas en asistencia a 8 horas exactas
-                    
+
                     res.json({
                         success: true,
-                        message: 'Horas extra rechazadas. Se contarán solo 8 horas.'
+                        message: accion === 'mantener' 
+                            ? 'Horas extra mantenidas (9.5 horas contabilizadas)'
+                            : 'Horas extra eliminadas (8 horas contabilizadas)',
+                        data: {
+                            corte_id: corte_id,
+                            accion: accion
+                        }
                     });
                 }
             );

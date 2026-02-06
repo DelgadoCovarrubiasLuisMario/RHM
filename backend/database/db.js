@@ -75,27 +75,6 @@ function createTables() {
         }
     });
 
-    // Tabla de cortes automáticos de jornadas
-    db.run(`
-        CREATE TABLE IF NOT EXISTS cortes_automaticos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            empleado_id INTEGER NOT NULL,
-            fecha TEXT NOT NULL,
-            horas_originales REAL NOT NULL,
-            horas_cortadas REAL NOT NULL DEFAULT 9.5,
-            horas_extra REAL NOT NULL DEFAULT 1.5,
-            estado TEXT NOT NULL DEFAULT 'pendiente' CHECK(estado IN ('pendiente', 'aprobado', 'rechazado')),
-            procesado_por INTEGER,
-            procesado_en DATETIME,
-            creado_en DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (empleado_id) REFERENCES empleados(id)
-        )
-    `, (err) => {
-        if (err) {
-            console.error('Error al crear tabla cortes_automaticos:', err);
-        }
-    });
-
     // Tabla de asistencia (secuencial para asegurar que se cree antes de los índices)
     db.run(`
         CREATE TABLE IF NOT EXISTS asistencia (
@@ -565,6 +544,36 @@ function createTables() {
             });
             db.run(`CREATE INDEX IF NOT EXISTS idx_bonos_mensuales_mes_area ON bonos_mensuales(mes, area)`, (err) => {
                 if (err) console.error('Error al crear índice bonos_mensuales_mes_area:', err);
+            });
+        }
+    });
+
+    // Tabla de cortes automáticos de jornada
+    db.run(`
+        CREATE TABLE IF NOT EXISTS cortes_automaticos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            empleado_id INTEGER NOT NULL,
+            asistencia_id INTEGER NOT NULL,
+            fecha TEXT NOT NULL,
+            horas_originales REAL NOT NULL,
+            horas_cortadas REAL NOT NULL DEFAULT 9.5,
+            horas_extra REAL NOT NULL DEFAULT 1.5,
+            procesado INTEGER DEFAULT 0,
+            accion_admin TEXT CHECK(accion_admin IN ('mantener', 'eliminar', NULL)),
+            creado_en DATETIME DEFAULT CURRENT_TIMESTAMP,
+            procesado_en DATETIME,
+            FOREIGN KEY (empleado_id) REFERENCES empleados(id),
+            FOREIGN KEY (asistencia_id) REFERENCES asistencia(id)
+        )
+    `, (err) => {
+        if (err) {
+            console.error('Error al crear tabla cortes_automaticos:', err);
+        } else {
+            db.run(`CREATE INDEX IF NOT EXISTS idx_cortes_empleado ON cortes_automaticos(empleado_id)`, (err) => {
+                if (err) console.error('Error al crear índice cortes_empleado:', err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_cortes_procesado ON cortes_automaticos(procesado)`, (err) => {
+                if (err) console.error('Error al crear índice cortes_procesado:', err);
             });
         }
     });

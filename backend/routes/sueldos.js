@@ -22,7 +22,6 @@ function redondearABloques15Minutos(horasDecimales) {
 }
 
 // Función para calcular horas trabajadas entre entrada y salida
-// Retorna: { horas: número, huboCorte: boolean, horasOriginales: número }
 function calcularHorasTrabajadas(fechaEntrada, horaEntrada, fechaSalida, horaSalida) {
     try {
         const parsearFechaHora = (fecha, hora) => {
@@ -53,74 +52,28 @@ function calcularHorasTrabajadas(fechaEntrada, horaEntrada, fechaSalida, horaSal
         const fechaHoraSalida = parsearFechaHora(fechaSalida, horaSalida);
 
         if (!fechaHoraEntrada || !fechaHoraSalida) {
-            return { horas: 0, huboCorte: false, horasOriginales: 0 };
+            return 0;
         }
 
         const diferenciaMs = fechaHoraSalida - fechaHoraEntrada;
         if (diferenciaMs < 0) {
-            return { horas: 0, huboCorte: false, horasOriginales: 0 };
+            return 0;
         }
 
         // Convertir a horas (con decimales)
         let horasDecimales = diferenciaMs / (1000 * 60 * 60);
-        const horasOriginales = horasDecimales;
         
-        // CORTE AUTOMÁTICO: Máximo 9.5 horas por jornada
-        const HORAS_MAXIMAS_JORNADA = 9.5;
-        const huboCorte = horasDecimales > HORAS_MAXIMAS_JORNADA;
-        
-        if (huboCorte) {
-            horasDecimales = HORAS_MAXIMAS_JORNADA;
+        // CORTE AUTOMÁTICO: Si excede 9.5 horas, cortar a 9.5 horas
+        if (horasDecimales > 9.5) {
+            horasDecimales = 9.5;
         }
         
         // Redondear a bloques de 15 minutos (hacia arriba)
-        const horasRedondeadas = redondearABloques15Minutos(horasDecimales);
-        
-        return {
-            horas: horasRedondeadas,
-            huboCorte: huboCorte,
-            horasOriginales: redondearABloques15Minutos(horasOriginales)
-        };
+        return redondearABloques15Minutos(horasDecimales);
     } catch (error) {
         console.error('Error al calcular horas:', error);
-        return { horas: 0, huboCorte: false, horasOriginales: 0 };
+        return 0;
     }
-}
-
-// Función para registrar corte automático
-function registrarCorteAutomatico(empleadoId, fecha, horasOriginales, horasCortadas, horasExtra) {
-    const db = getDB();
-    
-    // Verificar si ya existe un corte pendiente para este empleado y fecha
-    db.get(
-        'SELECT id FROM cortes_automaticos WHERE empleado_id = ? AND fecha = ? AND estado = ?',
-        [empleadoId, fecha, 'pendiente'],
-        (err, corteExistente) => {
-            if (err) {
-                console.error('Error al verificar corte existente:', err);
-                return;
-            }
-            
-            // Si ya existe un corte pendiente, no crear otro
-            if (corteExistente) {
-                return;
-            }
-            
-            // Registrar nuevo corte automático
-            db.run(
-                `INSERT INTO cortes_automaticos (empleado_id, fecha, horas_originales, horas_cortadas, horas_extra, estado)
-                 VALUES (?, ?, ?, ?, ?, 'pendiente')`,
-                [empleadoId, fecha, horasOriginales, horasCortadas, horasExtra],
-                function(insertErr) {
-                    if (insertErr) {
-                        console.error('Error al registrar corte automático:', insertErr);
-                    } else {
-                        console.log(`✅ Corte automático registrado: Empleado ${empleadoId}, Fecha ${fecha}, Horas originales: ${horasOriginales}, Horas cortadas: ${horasCortadas}`);
-                    }
-                }
-            );
-        }
-    );
 }
 
 // Función para obtener el día de la semana (0=domingo, 1=lunes, etc.)
@@ -267,48 +220,8 @@ router.get('/calcular/:empleado_id', (req, res) => {
 
                                         const vacacionesArray = vacaciones || [];
 
-                                        // Obtener cortes automáticos rechazados para este período
-                                        db.all(
-                                            `SELECT fecha FROM cortes_automaticos 
-                                             WHERE empleado_id = ? 
-                                             AND fecha BETWEEN ? AND ?
-                                             AND estado = 'rechazado'`,
-                                            [empleado_id, fechaInicio, fechaFin],
-                                            (err, cortesRechazados) => {
-                                                if (err) {
-                                                    console.error('Error al obtener cortes rechazados:', err);
-                                                }
-                                                
-                                                const fechasCortesRechazados = (cortesRechazados || []).map(c => c.fecha);
-                                                
-                                                // Procesar registros para calcular sueldo
-                                                const calculo = calcularSueldoSemanal(
-                                                    registros, 
-                                                    sueldoBase, 
-                                                    pagoPorHora, 
-                                                    fechaInicio, 
-                                                    fechaFin, 
-                                                    descuentosVarios, 
-                                                    vacacionesArray, 
-                                                    empleado.nombre, 
-                                                    empleado.apellido,
-                                                    empleado_id,
-                                                    fechasCortesRechazados
-                                                );
-                                                
-                                                res.json({
-                                                    success: true,
-                                                    empleado: `${empleado.nombre} ${empleado.apellido}`,
-                                                    periodo: {
-                                                        fecha_inicio: fechaInicio,
-                                                        fecha_fin: fechaFin
-                                                    },
-                                                    sueldo_base: sueldoBase,
-                                                    pago_por_hora: pagoPorHora,
-                                                    ...calculo
-                                                });
-                                            }
-                                        );
+                                        // Procesar registros para calcular sueldo
+                                        const calculo = calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, fechaFin, descuentosVarios, vacacionesArray, empleado.nombre, empleado.apellido);
                             
                                         res.json({
                                             success: true,
@@ -339,7 +252,7 @@ function esPatron(nombre, apellido) {
 }
 
 // Función principal de cálculo
-function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, fechaFin, descuentosVarios = 0, vacaciones = [], nombreEmpleado = '', apellidoEmpleado = '', empleadoId = null, fechasCortesRechazados = []) {
+function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, fechaFin, descuentosVarios = 0, vacaciones = [], nombreEmpleado = '', apellidoEmpleado = '') {
     // Si es patron, retornar $6000 fijos (sin descuentos de faltas, solo descuentos varios)
     if (esPatron(nombreEmpleado, apellidoEmpleado)) {
         return {
@@ -441,37 +354,37 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
         }
         
         if (entrada && salida) {
-            const resultadoHoras = calcularHorasTrabajadas(
+            let horasTrabajadas = calcularHorasTrabajadas(
                 entrada.fecha, entrada.hora, 
                 salida.fecha, salida.hora
             );
-            let horasTrabajadas = resultadoHoras.horas;
             
-            // Si hubo corte automático, registrar el corte (si no existe)
-            if (resultadoHoras.huboCorte && empleadoId) {
-                registrarCorteAutomatico(
-                    empleadoId,
-                    fecha,
-                    resultadoHoras.horasOriginales,
-                    9.5, // horas cortadas
-                    1.5  // horas extra (9.5 - 8 = 1.5)
-                );
-            }
-            
-            // Si hay un corte rechazado para esta fecha, ajustar a 8 horas exactas
-            if (fechasCortesRechazados.includes(fecha) && horasTrabajadas > 8) {
-                horasTrabajadas = 8;
-            }
-            
-            // Solo procesar si hay horas trabajadas (aunque sean pocas, como 1 hora)
-            if (horasTrabajadas > 0) {
-                if (!esDomingoDia) {
-                    // Contar como día trabajado (para calcular faltas)
-                    diasTrabajados++;
+            // Verificar si hay un corte automático procesado para este día
+            // Si el admin eligió "eliminar", solo contar 8 horas en lugar de 9.5
+            db.get(
+                `SELECT accion_admin FROM cortes_automaticos 
+                 WHERE empleado_id = ? AND fecha = ? AND asistencia_id = ? AND procesado = 1`,
+                [empleado_id, fecha, salida.id],
+                (err, corte) => {
+                    if (!err && corte && corte.accion_admin === 'eliminar') {
+                        // Si el admin eligió eliminar horas extra, solo contar 8 horas
+                        horasTrabajadas = Math.min(horasTrabajadas, 8);
+                    }
                     
-                    // Días normales: primeras 8 horas son normales, el resto extras
-                    let horasNormalesDia = Math.min(horasTrabajadas, 8);
-                    let horasExtrasDia = Math.max(0, horasTrabajadas - 8);
+                    procesarHorasDia(horasTrabajadas);
+                }
+            );
+            
+            function procesarHorasDia(horasTrabajadas) {
+                // Solo procesar si hay horas trabajadas (aunque sean pocas, como 1 hora)
+                if (horasTrabajadas > 0) {
+                    if (!esDomingoDia) {
+                        // Contar como día trabajado (para calcular faltas)
+                        diasTrabajados++;
+                        
+                        // Días normales: primeras 8 horas son normales, el resto extras
+                        let horasNormalesDia = Math.min(horasTrabajadas, 8);
+                        let horasExtrasDia = Math.max(0, horasTrabajadas - 8);
                     
                     horasNormalesTotales += horasNormalesDia;
                     
@@ -579,11 +492,10 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
         }
         
         if (entrada && salida) {
-            const resultadoHoras = calcularHorasTrabajadas(
+            const horasTrabajadas = calcularHorasTrabajadas(
                 entrada.fecha, entrada.hora, 
                 salida.fecha, salida.hora
             );
-            const horasTrabajadas = resultadoHoras.horas;
 
             // Incluir en el desglose aunque sean pocas horas (ej: 1 hora)
             if (horasTrabajadas > 0) {
@@ -847,61 +759,32 @@ router.get('/listar', (req, res) => {
                                         }
 
                                         const vacacionesArray = vacaciones || [];
+                                        const calculo = calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, fechaFin, descuentosVarios, vacacionesArray, empleado.nombre, empleado.apellido);
                                         
-                                        // Obtener cortes rechazados para este empleado y período
-                                        db.all(
-                                            `SELECT fecha FROM cortes_automaticos 
-                                             WHERE empleado_id = ? 
-                                             AND fecha BETWEEN ? AND ?
-                                             AND estado = 'rechazado'`,
-                                            [empleado.id, fechaInicio, fechaFin],
-                                            (err, cortesRechazados) => {
-                                                if (err) {
-                                                    console.error('Error al obtener cortes rechazados:', err);
-                                                }
-                                                
-                                                const fechasCortesRechazados = (cortesRechazados || []).map(c => c.fecha);
-                                                
-                                                const calculo = calcularSueldoSemanal(
-                                                    registros, 
-                                                    sueldoBase, 
-                                                    pagoPorHora, 
-                                                    fechaInicio, 
-                                                    fechaFin, 
-                                                    descuentosVarios, 
-                                                    vacacionesArray, 
-                                                    empleado.nombre, 
-                                                    empleado.apellido,
-                                                    empleado.id,
-                                                    fechasCortesRechazados
-                                                );
+                                        sueldos.push({
+                                            empleado_id: empleado.id,
+                                            empleado: `${empleado.nombre} ${empleado.apellido}`,
+                                            sueldo_base: sueldoBase,
+                                            pago_por_hora: pagoPorHora,
+                                            periodo: {
+                                                fecha_inicio: fechaInicio,
+                                                fecha_fin: fechaFin
+                                            },
+                                            ...calculo
+                                        });
                                         
-                                                sueldos.push({
-                                                    empleado_id: empleado.id,
-                                                    empleado: `${empleado.nombre} ${empleado.apellido}`,
-                                                    sueldo_base: sueldoBase,
-                                                    pago_por_hora: pagoPorHora,
-                                                    periodo: {
-                                                        fecha_inicio: fechaInicio,
-                                                        fecha_fin: fechaFin
-                                                    },
-                                                    ...calculo
-                                                });
-                                        
-                                                procesados++;
-                                                if (procesados === empleados.length) {
-                                                    res.json({
-                                                        success: true,
-                                                        periodo: {
-                                                            fecha_inicio: fechaInicio,
-                                                            fecha_fin: fechaFin
-                                                        },
-                                                        data: sueldos,
-                                                        total: sueldos.length
-                                                    });
-                                                }
-                                            }
-                                        );
+                                        procesados++;
+                                        if (procesados === empleados.length) {
+                                            res.json({
+                                                success: true,
+                                                periodo: {
+                                                    fecha_inicio: fechaInicio,
+                                                    fecha_fin: fechaFin
+                                                },
+                                                data: sueldos,
+                                                total: sueldos.length
+                                            });
+                                        }
                                     }
                                 );
                             }
@@ -911,7 +794,6 @@ router.get('/listar', (req, res) => {
             });
         }
     );
-    });
 });
 
 // Pagar sueldo a un empleado (elimina asistencia y descuentos, guarda en historial)
@@ -992,48 +874,22 @@ router.post('/pagar/:empleado_id', (req, res) => {
 
                                     const vacacionesArray = vacaciones || [];
                                     
-                                    // Obtener cortes rechazados para este empleado y período
-                                    db.all(
-                                        `SELECT fecha FROM cortes_automaticos 
-                                         WHERE empleado_id = ? 
-                                         AND fecha BETWEEN ? AND ?
-                                         AND estado = 'rechazado'`,
-                                        [empleado_id, fecha_inicio, fecha_fin],
-                                        (err, cortesRechazados) => {
-                                            if (err) {
-                                                console.error('Error al obtener cortes rechazados:', err);
-                                            }
-                                            
-                                            const fechasCortesRechazados = (cortesRechazados || []).map(c => c.fecha);
-                                            
-                                            // Calcular sueldo completo
-                                            const calculo = calcularSueldoSemanal(
-                                                registros, 
-                                                sueldoBase, 
-                                                pagoPorHora, 
-                                                fecha_inicio, 
-                                                fecha_fin, 
-                                                descuentosVarios, 
-                                                vacacionesArray, 
-                                                empleado.nombre, 
-                                                empleado.apellido,
-                                                empleado_id,
-                                                fechasCortesRechazados
-                                            );
+                                    // Calcular sueldo completo
+                                    const calculo = calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fecha_inicio, fecha_fin, descuentosVarios, vacacionesArray, empleado.nombre, empleado.apellido);
                                     
-                                            const desgloseJSON = JSON.stringify({
-                                                empleado: `${empleado.nombre} ${empleado.apellido}`,
-                                                periodo: {
-                                                    fecha_inicio: fecha_inicio,
-                                                    fecha_fin: fecha_fin
-                                                },
-                                                sueldo_base: sueldoBase,
-                                                pago_por_hora: pagoPorHora,
-                                                ...calculo
-                                            });
+                                    const desgloseJSON = JSON.stringify({
+                                        empleado: `${empleado.nombre} ${empleado.apellido}`,
+                                        periodo: {
+                                            fecha_inicio: fecha_inicio,
+                                            fecha_fin: fecha_fin
+                                        },
+                                        sueldo_base: sueldoBase,
+                                        pago_por_hora: pagoPorHora,
+                                        ...calculo
+                                    });
 
-                                            // Guardar en historial de pagos
-                                            db.run(
+                                    // Guardar en historial de pagos
+                                    db.run(
                                         `INSERT INTO pagos (empleado_id, fecha_inicio, fecha_fin, area, sueldo_base, total_pagado, desglose)
                                          VALUES (?, ?, ?, ?, ?, ?, ?)`,
                                         [empleado_id, fecha_inicio, fecha_fin, null, sueldoBase, calculo.total, desgloseJSON],
