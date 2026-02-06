@@ -22,6 +22,7 @@ function redondearABloques15Minutos(horasDecimales) {
 }
 
 // Función para calcular horas trabajadas entre entrada y salida
+// Retorna: { horas: número, huboCorte: boolean, horasOriginales: número }
 function calcularHorasTrabajadas(fechaEntrada, horaEntrada, fechaSalida, horaSalida) {
     try {
         const parsearFechaHora = (fecha, hora) => {
@@ -52,23 +53,74 @@ function calcularHorasTrabajadas(fechaEntrada, horaEntrada, fechaSalida, horaSal
         const fechaHoraSalida = parsearFechaHora(fechaSalida, horaSalida);
 
         if (!fechaHoraEntrada || !fechaHoraSalida) {
-            return 0;
+            return { horas: 0, huboCorte: false, horasOriginales: 0 };
         }
 
         const diferenciaMs = fechaHoraSalida - fechaHoraEntrada;
         if (diferenciaMs < 0) {
-            return 0;
+            return { horas: 0, huboCorte: false, horasOriginales: 0 };
         }
 
         // Convertir a horas (con decimales)
-        const horasDecimales = diferenciaMs / (1000 * 60 * 60);
+        let horasDecimales = diferenciaMs / (1000 * 60 * 60);
+        const horasOriginales = horasDecimales;
+        
+        // CORTE AUTOMÁTICO: Máximo 9.5 horas por jornada
+        const HORAS_MAXIMAS_JORNADA = 9.5;
+        const huboCorte = horasDecimales > HORAS_MAXIMAS_JORNADA;
+        
+        if (huboCorte) {
+            horasDecimales = HORAS_MAXIMAS_JORNADA;
+        }
         
         // Redondear a bloques de 15 minutos (hacia arriba)
-        return redondearABloques15Minutos(horasDecimales);
+        const horasRedondeadas = redondearABloques15Minutos(horasDecimales);
+        
+        return {
+            horas: horasRedondeadas,
+            huboCorte: huboCorte,
+            horasOriginales: redondearABloques15Minutos(horasOriginales)
+        };
     } catch (error) {
         console.error('Error al calcular horas:', error);
-        return 0;
+        return { horas: 0, huboCorte: false, horasOriginales: 0 };
     }
+}
+
+// Función para registrar corte automático
+function registrarCorteAutomatico(empleadoId, fecha, horasOriginales, horasCortadas, horasExtra) {
+    const db = getDB();
+    
+    // Verificar si ya existe un corte pendiente para este empleado y fecha
+    db.get(
+        'SELECT id FROM cortes_automaticos WHERE empleado_id = ? AND fecha = ? AND estado = ?',
+        [empleadoId, fecha, 'pendiente'],
+        (err, corteExistente) => {
+            if (err) {
+                console.error('Error al verificar corte existente:', err);
+                return;
+            }
+            
+            // Si ya existe un corte pendiente, no crear otro
+            if (corteExistente) {
+                return;
+            }
+            
+            // Registrar nuevo corte automático
+            db.run(
+                `INSERT INTO cortes_automaticos (empleado_id, fecha, horas_originales, horas_cortadas, horas_extra, estado)
+                 VALUES (?, ?, ?, ?, ?, 'pendiente')`,
+                [empleadoId, fecha, horasOriginales, horasCortadas, horasExtra],
+                function(insertErr) {
+                    if (insertErr) {
+                        console.error('Error al registrar corte automático:', insertErr);
+                    } else {
+                        console.log(`✅ Corte automático registrado: Empleado ${empleadoId}, Fecha ${fecha}, Horas originales: ${horasOriginales}, Horas cortadas: ${horasCortadas}`);
+                    }
+                }
+            );
+        }
+    );
 }
 
 // Función para obtener el día de la semana (0=domingo, 1=lunes, etc.)
@@ -349,10 +401,22 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
         }
         
         if (entrada && salida) {
-            const horasTrabajadas = calcularHorasTrabajadas(
+            const resultadoHoras = calcularHorasTrabajadas(
                 entrada.fecha, entrada.hora, 
                 salida.fecha, salida.hora
             );
+            const horasTrabajadas = resultadoHoras.horas;
+            
+            // Si hubo corte automático, registrar el corte
+            if (resultadoHoras.huboCorte) {
+                registrarCorteAutomatico(
+                    empleadoId,
+                    fecha,
+                    resultadoHoras.horasOriginales,
+                    9.5, // horas cortadas
+                    1.5  // horas extra (9.5 - 8 = 1.5)
+                );
+            }
             
             // Solo procesar si hay horas trabajadas (aunque sean pocas, como 1 hora)
             if (horasTrabajadas > 0) {
@@ -360,9 +424,24 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
                     // Contar como día trabajado (para calcular faltas)
                     diasTrabajados++;
                     
-                    // Días normales: primeras 8 horas son normales, el resto extras
+                    // Verificar si hay un corte automático rechazado para este día
+                    // Si fue rechazado, solo contar 8 horas (sin horas extra)
                     let horasNormalesDia = Math.min(horasTrabajadas, 8);
                     let horasExtrasDia = Math.max(0, horasTrabajadas - 8);
+                    
+                    // Si hubo corte y fue rechazado, ajustar a 8 horas exactas
+                    if (resultadoHoras.huboCorte) {
+                        db.get(
+                            'SELECT estado FROM cortes_automaticos WHERE empleado_id = ? AND fecha = ?',
+                            [empleadoId, fecha],
+                            (err, corte) => {
+                                if (!err && corte && corte.estado === 'rechazado') {
+                                    horasNormalesDia = 8;
+                                    horasExtrasDia = 0;
+                                }
+                            }
+                        );
+                    }
                     
                     horasNormalesTotales += horasNormalesDia;
                     
@@ -470,10 +549,11 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
         }
         
         if (entrada && salida) {
-            const horasTrabajadas = calcularHorasTrabajadas(
+            const resultadoHoras = calcularHorasTrabajadas(
                 entrada.fecha, entrada.hora, 
                 salida.fecha, salida.hora
             );
+            const horasTrabajadas = resultadoHoras.horas;
 
             // Incluir en el desglose aunque sean pocas horas (ej: 1 hora)
             if (horasTrabajadas > 0) {
