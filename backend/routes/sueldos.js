@@ -267,8 +267,48 @@ router.get('/calcular/:empleado_id', (req, res) => {
 
                                         const vacacionesArray = vacaciones || [];
 
-                                        // Procesar registros para calcular sueldo
-                                        const calculo = calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, fechaFin, descuentosVarios, vacacionesArray, empleado.nombre, empleado.apellido);
+                                        // Obtener cortes automáticos rechazados para este período
+                                        db.all(
+                                            `SELECT fecha FROM cortes_automaticos 
+                                             WHERE empleado_id = ? 
+                                             AND fecha BETWEEN ? AND ?
+                                             AND estado = 'rechazado'`,
+                                            [empleado_id, fechaInicio, fechaFin],
+                                            (err, cortesRechazados) => {
+                                                if (err) {
+                                                    console.error('Error al obtener cortes rechazados:', err);
+                                                }
+                                                
+                                                const fechasCortesRechazados = (cortesRechazados || []).map(c => c.fecha);
+                                                
+                                                // Procesar registros para calcular sueldo
+                                                const calculo = calcularSueldoSemanal(
+                                                    registros, 
+                                                    sueldoBase, 
+                                                    pagoPorHora, 
+                                                    fechaInicio, 
+                                                    fechaFin, 
+                                                    descuentosVarios, 
+                                                    vacacionesArray, 
+                                                    empleado.nombre, 
+                                                    empleado.apellido,
+                                                    empleado_id,
+                                                    fechasCortesRechazados
+                                                );
+                                                
+                                                res.json({
+                                                    success: true,
+                                                    empleado: `${empleado.nombre} ${empleado.apellido}`,
+                                                    periodo: {
+                                                        fecha_inicio: fechaInicio,
+                                                        fecha_fin: fechaFin
+                                                    },
+                                                    sueldo_base: sueldoBase,
+                                                    pago_por_hora: pagoPorHora,
+                                                    ...calculo
+                                                });
+                                            }
+                                        );
                             
                                         res.json({
                                             success: true,
@@ -299,7 +339,7 @@ function esPatron(nombre, apellido) {
 }
 
 // Función principal de cálculo
-function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, fechaFin, descuentosVarios = 0, vacaciones = [], nombreEmpleado = '', apellidoEmpleado = '') {
+function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, fechaFin, descuentosVarios = 0, vacaciones = [], nombreEmpleado = '', apellidoEmpleado = '', empleadoId = null, fechasCortesRechazados = []) {
     // Si es patron, retornar $6000 fijos (sin descuentos de faltas, solo descuentos varios)
     if (esPatron(nombreEmpleado, apellidoEmpleado)) {
         return {
@@ -407,28 +447,20 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
             );
             let horasTrabajadas = resultadoHoras.horas;
             
-            // Si hubo corte automático, verificar si fue rechazado
-            if (resultadoHoras.huboCorte) {
-                // Verificar si ya existe un corte rechazado para este día
-                db.get(
-                    'SELECT estado FROM cortes_automaticos WHERE empleado_id = ? AND fecha = ?',
-                    [empleadoId, fecha],
-                    (err, corteExistente) => {
-                        if (!err && corteExistente && corteExistente.estado === 'rechazado') {
-                            // Si fue rechazado, ajustar a 8 horas exactas
-                            horasTrabajadas = 8;
-                        } else if (!err && !corteExistente) {
-                            // Si no existe corte, registrar uno nuevo
-                            registrarCorteAutomatico(
-                                empleadoId,
-                                fecha,
-                                resultadoHoras.horasOriginales,
-                                9.5, // horas cortadas
-                                1.5  // horas extra (9.5 - 8 = 1.5)
-                            );
-                        }
-                    }
+            // Si hubo corte automático, registrar el corte (si no existe)
+            if (resultadoHoras.huboCorte && empleadoId) {
+                registrarCorteAutomatico(
+                    empleadoId,
+                    fecha,
+                    resultadoHoras.horasOriginales,
+                    9.5, // horas cortadas
+                    1.5  // horas extra (9.5 - 8 = 1.5)
                 );
+            }
+            
+            // Si hay un corte rechazado para esta fecha, ajustar a 8 horas exactas
+            if (fechasCortesRechazados.includes(fecha) && horasTrabajadas > 8) {
+                horasTrabajadas = 8;
             }
             
             // Solo procesar si hay horas trabajadas (aunque sean pocas, como 1 hora)
@@ -438,7 +470,6 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
                     diasTrabajados++;
                     
                     // Días normales: primeras 8 horas son normales, el resto extras
-                    // Si hubo corte rechazado, horasTrabajadas ya será 8
                     let horasNormalesDia = Math.min(horasTrabajadas, 8);
                     let horasExtrasDia = Math.max(0, horasTrabajadas - 8);
                     
