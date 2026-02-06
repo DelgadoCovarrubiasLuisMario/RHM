@@ -1021,19 +1021,19 @@ router.post('/pagar/:empleado_id', (req, res) => {
                                                 fechasCortesRechazados
                                             );
                                     
-                                    const desgloseJSON = JSON.stringify({
-                                        empleado: `${empleado.nombre} ${empleado.apellido}`,
-                                        periodo: {
-                                            fecha_inicio: fecha_inicio,
-                                            fecha_fin: fecha_fin
-                                        },
-                                        sueldo_base: sueldoBase,
-                                        pago_por_hora: pagoPorHora,
-                                        ...calculo
-                                    });
+                                            const desgloseJSON = JSON.stringify({
+                                                empleado: `${empleado.nombre} ${empleado.apellido}`,
+                                                periodo: {
+                                                    fecha_inicio: fecha_inicio,
+                                                    fecha_fin: fecha_fin
+                                                },
+                                                sueldo_base: sueldoBase,
+                                                pago_por_hora: pagoPorHora,
+                                                ...calculo
+                                            });
 
-                                    // Guardar en historial de pagos
-                                    db.run(
+                                            // Guardar en historial de pagos
+                                            db.run(
                                         `INSERT INTO pagos (empleado_id, fecha_inicio, fecha_fin, area, sueldo_base, total_pagado, desglose)
                                          VALUES (?, ?, ?, ?, ?, ?, ?)`,
                                         [empleado_id, fecha_inicio, fecha_fin, null, sueldoBase, calculo.total, desgloseJSON],
