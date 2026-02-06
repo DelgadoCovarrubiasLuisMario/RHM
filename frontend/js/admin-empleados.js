@@ -85,7 +85,9 @@ function mostrarEmpleados(empleados, area) {
             <div class="empleado-item">
                 <div class="empleado-main-content">
                     <div class="empleado-foto-qr">
-                        ${empleado.foto ? `<img src="${empleado.foto}" alt="${empleado.nombre}" class="empleado-foto" onerror="this.style.display='none'">` : '<div class="empleado-foto-placeholder">📷</div>'}
+                        <div class="empleado-foto-wrapper" onclick="abrirModalFoto(${empleado.id}, '${empleado.nombre.replace(/'/g, "\\'")} ${empleado.apellido.replace(/'/g, "\\'")}')" title="Clic para cambiar foto">
+                            ${empleado.foto ? `<img src="${empleado.foto}" alt="${empleado.nombre}" class="empleado-foto" onerror="this.style.display='none'">` : '<div class="empleado-foto-placeholder">📷<br><small>Clic para agregar</small></div>'}
+                        </div>
                         <div class="empleado-qr-container" id="qr-container-${empleado.id}">
                             <div class="qr-loading">Cargando QR...</div>
                         </div>
@@ -612,6 +614,7 @@ async function guardarEmpleado(e) {
 
 // Variable global para almacenar la foto actual
 let fotoActualBase64 = null;
+let empleadoIdParaFoto = null; // Para el modal de cambiar foto
 
 // Manejar selección de archivo
 function manejarSeleccionFoto(event) {
@@ -780,6 +783,245 @@ function eliminarFotoPreview() {
     fotoActualBase64 = null;
     if (input) {
         input.value = '';
+    }
+}
+
+// Abrir modal para cambiar foto de empleado existente
+function abrirModalFoto(empleadoId, nombreEmpleado) {
+    empleadoIdParaFoto = empleadoId;
+    const modal = document.getElementById('modalFotoEmpleado');
+    const titulo = document.getElementById('modalTituloFotoEmpleado');
+    
+    titulo.textContent = `Cambiar Foto - ${nombreEmpleado}`;
+    
+    // Cargar foto actual si existe
+    const apiURL = window.API_CONFIG ? window.API_CONFIG.getBaseURL() : 'http://localhost:3000';
+    fetch(`${apiURL}/api/empleados/${empleadoId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.data.foto) {
+                mostrarFotoPreviewModal(data.data.foto);
+            } else {
+                eliminarFotoPreviewModal();
+            }
+        })
+        .catch(error => {
+            console.error('Error al cargar foto actual:', error);
+            eliminarFotoPreviewModal();
+        });
+    
+    modal.style.display = 'block';
+}
+
+// Cerrar modal de foto
+function cerrarModalFotoEmpleado() {
+    document.getElementById('modalFotoEmpleado').style.display = 'none';
+    empleadoIdParaFoto = null;
+    eliminarFotoPreviewModal();
+}
+
+// Manejar selección de archivo en modal
+function manejarSeleccionFotoModal(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+        alert('❌ Por favor selecciona un archivo de imagen');
+        return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+        alert('❌ La imagen es demasiado grande. Máximo 5MB');
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const base64 = e.target.result;
+        mostrarFotoPreviewModal(base64);
+    };
+    reader.onerror = function() {
+        alert('❌ Error al leer el archivo');
+    };
+    reader.readAsDataURL(file);
+}
+
+// Capturar foto desde cámara en modal
+function capturarFotoDesdeCamaraModal() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert('⚠️ Tu navegador no soporta la captura de fotos. Por favor usa "Seleccionar Archivo"');
+        return;
+    }
+
+    const video = document.createElement('video');
+    video.style.position = 'fixed';
+    video.style.top = '-9999px';
+    video.style.width = '640px';
+    video.style.height = '480px';
+    video.autoplay = true;
+    video.playsInline = true;
+    video.muted = true;
+    document.body.appendChild(video);
+
+    navigator.mediaDevices.getUserMedia({ 
+        video: { 
+            facingMode: 'user',
+            width: { ideal: 640 },
+            height: { ideal: 480 }
+        } 
+    })
+    .then(stream => {
+        video.srcObject = stream;
+        
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10001;
+        `;
+        
+        const videoContainer = document.createElement('div');
+        videoContainer.style.cssText = `
+            position: relative;
+            width: 90%;
+            max-width: 640px;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+        `;
+        
+        const videoDisplay = document.createElement('video');
+        videoDisplay.srcObject = stream;
+        videoDisplay.autoplay = true;
+        videoDisplay.playsInline = true;
+        videoDisplay.style.cssText = 'width: 100%; height: auto; display: block;';
+        
+        const buttonsContainer = document.createElement('div');
+        buttonsContainer.style.cssText = `
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+            justify-content: center;
+        `;
+        
+        const btnCapturar = document.createElement('button');
+        btnCapturar.textContent = '📷 Capturar';
+        btnCapturar.className = 'btn btn-primary';
+        btnCapturar.style.cssText = 'padding: 1rem 2rem; font-size: 1.2rem;';
+        
+        const btnCancelar = document.createElement('button');
+        btnCancelar.textContent = '❌ Cancelar';
+        btnCancelar.className = 'btn btn-secondary';
+        btnCancelar.style.cssText = 'padding: 1rem 2rem; font-size: 1.2rem;';
+        
+        videoContainer.appendChild(videoDisplay);
+        buttonsContainer.appendChild(btnCapturar);
+        buttonsContainer.appendChild(btnCancelar);
+        modal.appendChild(videoContainer);
+        modal.appendChild(buttonsContainer);
+        document.body.appendChild(modal);
+        
+        btnCapturar.onclick = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = videoDisplay.videoWidth;
+            canvas.height = videoDisplay.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(videoDisplay, 0, 0);
+            
+            const fotoBase64 = canvas.toDataURL('image/jpeg', 0.8);
+            mostrarFotoPreviewModal(fotoBase64);
+            
+            stream.getTracks().forEach(track => track.stop());
+            document.body.removeChild(modal);
+            document.body.removeChild(video);
+        };
+        
+        btnCancelar.onclick = () => {
+            stream.getTracks().forEach(track => track.stop());
+            document.body.removeChild(modal);
+            document.body.removeChild(video);
+        };
+    })
+    .catch(err => {
+        console.error('Error al acceder a la cámara:', err);
+        alert('❌ No se pudo acceder a la cámara. Asegúrate de dar permisos de cámara.');
+        document.body.removeChild(video);
+    });
+}
+
+// Mostrar preview de foto en modal
+function mostrarFotoPreviewModal(base64) {
+    const container = document.getElementById('fotoPreviewContainerModal');
+    const img = document.getElementById('fotoPreviewModal');
+    
+    img.src = base64;
+    container.style.display = 'block';
+    fotoActualBase64 = base64;
+}
+
+// Eliminar preview de foto en modal
+function eliminarFotoPreviewModal() {
+    const container = document.getElementById('fotoPreviewContainerModal');
+    const img = document.getElementById('fotoPreviewModal');
+    const input = document.getElementById('empleadoFotoInputModal');
+    
+    img.src = '';
+    container.style.display = 'none';
+    fotoActualBase64 = null;
+    if (input) {
+        input.value = '';
+    }
+}
+
+// Guardar foto del empleado
+async function guardarFotoEmpleado() {
+    if (!empleadoIdParaFoto) {
+        alert('❌ Error: No se identificó el empleado');
+        return;
+    }
+
+    const fotoPreview = document.getElementById('fotoPreviewModal');
+    const fotoBase64 = fotoPreview && fotoPreview.src && fotoPreview.src.startsWith('data:') 
+        ? fotoPreview.src 
+        : null;
+
+    if (!fotoBase64) {
+        alert('❌ Por favor selecciona o captura una foto');
+        return;
+    }
+
+    try {
+        const apiURL = window.API_CONFIG ? window.API_CONFIG.getBaseURL() : 'http://localhost:3000';
+        const response = await fetch(`${apiURL}/api/empleados/${empleadoIdParaFoto}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                foto: fotoBase64
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            alert('✅ Foto actualizada correctamente');
+            cerrarModalFotoEmpleado();
+            cargarEmpleados(); // Recargar lista para mostrar nueva foto
+        } else {
+            alert(`❌ Error: ${data.message}`);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('❌ Error de conexión. Verifica que el servidor esté corriendo.');
     }
 }
 
