@@ -172,9 +172,10 @@ function cerrarJornadasPendientes() {
     }
 
     // Importar función de cierre automático
-    const { cerrarJornadasAutomaticamente } = require('./routes/asistencia');
+    const asistenciaRoutes = require('./routes/asistencia');
     
-    cerrarJornadasAutomaticamente(db)
+    if (asistenciaRoutes.cerrarJornadasAutomaticamente) {
+        asistenciaRoutes.cerrarJornadasAutomaticamente(db)
         .then(resultado => {
             if (resultado.cerradas > 0) {
                 console.log(`✅ ${resultado.cerradas} jornada(s) cerrada(s) automáticamente`);
