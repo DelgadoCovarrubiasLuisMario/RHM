@@ -518,5 +518,7 @@ router.get('/listar', (req, res) => {
     });
 });
 
+// Exportar función para uso en server.js
 module.exports = router;
+module.exports.cerrarJornadasAutomaticamente = cerrarJornadasAutomaticamente;
 
