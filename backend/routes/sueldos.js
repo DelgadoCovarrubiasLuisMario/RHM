@@ -61,12 +61,7 @@ function calcularHorasTrabajadas(fechaEntrada, horaEntrada, fechaSalida, horaSal
         }
 
         // Convertir a horas (con decimales)
-        let horasDecimales = diferenciaMs / (1000 * 60 * 60);
-        
-        // CORTE AUTOMÁTICO: Si excede 9.5 horas, cortar a 9.5 horas
-        if (horasDecimales > 9.5) {
-            horasDecimales = 9.5;
-        }
+        const horasDecimales = diferenciaMs / (1000 * 60 * 60);
         
         // Redondear a bloques de 15 minutos (hacia arriba)
         return redondearABloques15Minutos(horasDecimales);
@@ -220,41 +215,8 @@ router.get('/calcular/:empleado_id', (req, res) => {
 
                                         const vacacionesArray = vacaciones || [];
 
-                                        // Obtener cortes automáticos del empleado para el período
-                                        db.all(
-                                            `SELECT fecha, asistencia_id, accion_admin 
-                                             FROM cortes_automaticos 
-                                             WHERE empleado_id = ? 
-                                             AND fecha >= ? 
-                                             AND fecha <= ? 
-                                             AND procesado = 1`,
-                                            [empleado_id, fechaInicio, fechaFin],
-                                            (err, cortes) => {
-                                                if (err) {
-                                                    console.error('Error al obtener cortes automáticos:', err);
-                                                }
-                                                
-                                                const cortesMap = {};
-                                                (cortes || []).forEach(corte => {
-                                                    cortesMap[corte.fecha] = corte.accion_admin;
-                                                });
-
-                                                // Procesar registros para calcular sueldo
-                                                const calculo = calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, fechaFin, descuentosVarios, vacacionesArray, empleado.nombre, empleado.apellido, empleado_id, cortesMap);
-                                                
-                                                res.json({
-                                                    success: true,
-                                                    empleado: `${empleado.nombre} ${empleado.apellido}`,
-                                                    periodo: {
-                                                        fecha_inicio: fechaInicio,
-                                                        fecha_fin: fechaFin
-                                                    },
-                                                    sueldo_base: sueldoBase,
-                                                    pago_por_hora: pagoPorHora,
-                                                    ...calculo
-                                                });
-                                            }
-                                        );
+                                        // Procesar registros para calcular sueldo
+                                        const calculo = calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, fechaFin, descuentosVarios, vacacionesArray, empleado.nombre, empleado.apellido);
                             
                                         res.json({
                                             success: true,
@@ -285,7 +247,7 @@ function esPatron(nombre, apellido) {
 }
 
 // Función principal de cálculo
-function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, fechaFin, descuentosVarios = 0, vacaciones = [], nombreEmpleado = '', apellidoEmpleado = '', empleadoId = null, cortesAutomaticos = {}) {
+function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, fechaFin, descuentosVarios = 0, vacaciones = [], nombreEmpleado = '', apellidoEmpleado = '') {
     // Si es patron, retornar $6000 fijos (sin descuentos de faltas, solo descuentos varios)
     if (esPatron(nombreEmpleado, apellidoEmpleado)) {
         return {
@@ -387,17 +349,10 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
         }
         
         if (entrada && salida) {
-            let horasTrabajadas = calcularHorasTrabajadas(
+            const horasTrabajadas = calcularHorasTrabajadas(
                 entrada.fecha, entrada.hora, 
                 salida.fecha, salida.hora
             );
-            
-            // Verificar si hay un corte automático procesado para este día
-            // Si el admin eligió "eliminar", solo contar 8 horas en lugar de 9.5
-            if (cortesAutomaticos[fecha] === 'eliminar') {
-                // Si el admin eligió eliminar horas extra, solo contar 8 horas
-                horasTrabajadas = Math.min(horasTrabajadas, 8);
-            }
             
             // Solo procesar si hay horas trabajadas (aunque sean pocas, como 1 hora)
             if (horasTrabajadas > 0) {
@@ -436,7 +391,6 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
                     }
                 } else {
                     // Domingo: TODAS las horas se cuentan como horas extras (dobles/triples según acumulación semanal)
-                    diasTrabajados++;
                     horasExtrasSemanales += horasTrabajadas;
                     horasExtrasPorDia.push({
                         fecha,
@@ -783,29 +737,9 @@ router.get('/listar', (req, res) => {
                                         }
 
                                         const vacacionesArray = vacaciones || [];
+                                        const calculo = calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, fechaFin, descuentosVarios, vacacionesArray, empleado.nombre, empleado.apellido);
                                         
-                                        // Obtener cortes automáticos del empleado para el período
-                                        db.all(
-                                            `SELECT fecha, asistencia_id, accion_admin 
-                                             FROM cortes_automaticos 
-                                             WHERE empleado_id = ? 
-                                             AND fecha >= ? 
-                                             AND fecha <= ? 
-                                             AND procesado = 1`,
-                                            [empleado.id, fechaInicio, fechaFin],
-                                            (err, cortes) => {
-                                                if (err) {
-                                                    console.error('Error al obtener cortes automáticos:', err);
-                                                }
-                                                
-                                                const cortesMap = {};
-                                                (cortes || []).forEach(corte => {
-                                                    cortesMap[corte.fecha] = corte.accion_admin;
-                                                });
-                                                
-                                                const calculo = calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, fechaFin, descuentosVarios, vacacionesArray, empleado.nombre, empleado.apellido, empleado.id, cortesMap);
-                                        
-                                                sueldos.push({
+                                        sueldos.push({
                                             empleado_id: empleado.id,
                                             empleado: `${empleado.nombre} ${empleado.apellido}`,
                                             sueldo_base: sueldoBase,
@@ -918,88 +852,67 @@ router.post('/pagar/:empleado_id', (req, res) => {
 
                                     const vacacionesArray = vacaciones || [];
                                     
-                                    // Obtener cortes automáticos del empleado para el período
-                                    db.all(
-                                        `SELECT fecha, asistencia_id, accion_admin 
-                                         FROM cortes_automaticos 
-                                         WHERE empleado_id = ? 
-                                         AND fecha >= ? 
-                                         AND fecha <= ? 
-                                         AND procesado = 1`,
-                                        [empleado_id, fecha_inicio, fecha_fin],
-                                        (err, cortes) => {
-                                            if (err) {
-                                                console.error('Error al obtener cortes automáticos:', err);
-                                            }
-                                            
-                                            const cortesMap = {};
-                                            (cortes || []).forEach(corte => {
-                                                cortesMap[corte.fecha] = corte.accion_admin;
-                                            });
-                                            
-                                            // Calcular sueldo completo
-                                            const calculo = calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fecha_inicio, fecha_fin, descuentosVarios, vacacionesArray, empleado.nombre, empleado.apellido, empleado_id, cortesMap);
+                                    // Calcular sueldo completo
+                                    const calculo = calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fecha_inicio, fecha_fin, descuentosVarios, vacacionesArray, empleado.nombre, empleado.apellido);
                                     
-                                            const desgloseJSON = JSON.stringify({
-                                                empleado: `${empleado.nombre} ${empleado.apellido}`,
-                                                periodo: {
-                                                    fecha_inicio: fecha_inicio,
-                                                    fecha_fin: fecha_fin
-                                                },
-                                                sueldo_base: sueldoBase,
-                                                pago_por_hora: pagoPorHora,
-                                                ...calculo
-                                            });
+                                    const desgloseJSON = JSON.stringify({
+                                        empleado: `${empleado.nombre} ${empleado.apellido}`,
+                                        periodo: {
+                                            fecha_inicio: fecha_inicio,
+                                            fecha_fin: fecha_fin
+                                        },
+                                        sueldo_base: sueldoBase,
+                                        pago_por_hora: pagoPorHora,
+                                        ...calculo
+                                    });
 
-                                            // Guardar en historial de pagos
+                                    // Guardar en historial de pagos
+                                    db.run(
+                                        `INSERT INTO pagos (empleado_id, fecha_inicio, fecha_fin, area, sueldo_base, total_pagado, desglose)
+                                         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                                        [empleado_id, fecha_inicio, fecha_fin, null, sueldoBase, calculo.total, desgloseJSON],
+                                        function(err) {
+                                    if (err) {
+                                        return res.status(500).json({ 
+                                            success: false, 
+                                            message: 'Error al guardar pago: ' + err.message 
+                                        });
+                                    }
+
+                                    // Generar todas las fechas en el rango para eliminar
+                                    const fechasEnRangoEliminar = generarFechasEnRango(fecha_inicio, fecha_fin);
+                                    
+                                    // Eliminar registros de asistencia del período
+                                    db.run(
+                                        `DELETE FROM asistencia 
+                                         WHERE empleado_id = ? 
+                                         AND fecha IN (${fechasEnRangoEliminar.map(() => '?').join(',')})`,
+                                        [empleado_id, ...fechasEnRangoEliminar],
+                                        (err) => {
+                                            if (err) {
+                                                console.error('Error al eliminar asistencia:', err);
+                                                // Continuar aunque haya error
+                                            }
+
+                                            // Eliminar descuentos varios del período
                                             db.run(
-                                                `INSERT INTO pagos (empleado_id, fecha_inicio, fecha_fin, area, sueldo_base, total_pagado, desglose)
-                                                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                                                [empleado_id, fecha_inicio, fecha_fin, null, sueldoBase, calculo.total, desgloseJSON],
-                                                function(err) {
+                                                `DELETE FROM descuentos_varios 
+                                                 WHERE empleado_id = ? 
+                                                 AND fecha_inicio = ? 
+                                                 AND fecha_fin = ?`,
+                                                [empleado_id, fecha_inicio, fecha_fin],
+                                                (err) => {
                                                     if (err) {
-                                                        return res.status(500).json({ 
-                                                            success: false, 
-                                                            message: 'Error al guardar pago: ' + err.message 
-                                                        });
+                                                        console.error('Error al eliminar descuentos:', err);
+                                                        // Continuar aunque haya error
                                                     }
 
-                                                    // Generar todas las fechas en el rango para eliminar
-                                                    const fechasEnRangoEliminar = generarFechasEnRango(fecha_inicio, fecha_fin);
-                                                    
-                                                    // Eliminar registros de asistencia del período
-                                                    db.run(
-                                                        `DELETE FROM asistencia 
-                                                         WHERE empleado_id = ? 
-                                                         AND fecha IN (${fechasEnRangoEliminar.map(() => '?').join(',')})`,
-                                                        [empleado_id, ...fechasEnRangoEliminar],
-                                                        (err) => {
-                                                            if (err) {
-                                                                console.error('Error al eliminar asistencia:', err);
-                                                                // Continuar aunque haya error
-                                                            }
-
-                                                            // Eliminar descuentos varios del período
-                                                            db.run(
-                                                                `DELETE FROM descuentos_varios 
-                                                                 WHERE empleado_id = ? 
-                                                                 AND fecha_inicio = ? 
-                                                                 AND fecha_fin = ?`,
-                                                                [empleado_id, fecha_inicio, fecha_fin],
-                                                                (err) => {
-                                                                    if (err) {
-                                                                        console.error('Error al eliminar descuentos:', err);
-                                                                        // Continuar aunque haya error
-                                                                    }
-
-                                                                    res.json({
-                                                                        success: true,
-                                                                        message: `Pago registrado para ${empleado.nombre} ${empleado.apellido}`,
-                                                                        pago_id: this.lastID,
-                                                                        total_pagado: calculo.total
-                                                                    });
-                                                                }
-                                                            );
+                                                            res.json({
+                                                                success: true,
+                                                                message: `Pago registrado para ${empleado.nombre} ${empleado.apellido}`,
+                                                                pago_id: this.lastID,
+                                                                total_pagado: calculo.total
+                                                            });
                                                         }
                                                     );
                                                 }

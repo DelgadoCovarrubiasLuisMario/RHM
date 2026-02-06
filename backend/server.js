@@ -31,7 +31,6 @@ app.use('/api/empleados', require('./routes/empleados'));
 app.use('/api/uniformes', require('./routes/uniformes'));
 app.use('/api/vacaciones', require('./routes/vacaciones'));
 app.use('/api/produccion', require('./routes/produccion'));
-app.use('/api/cortes-automaticos', require('./routes/cortes-automaticos'));
 
 // Manejo de errores para rutas API
 app.use('/api/*', (req, res, next) => {

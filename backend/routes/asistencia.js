@@ -47,22 +47,10 @@ function calcularTiempoTrabajado(fechaEntrada, horaEntrada, fechaSalida, horaSal
         }
 
         // Calcular diferencia en milisegundos
-        let diferenciaMs = fechaHoraSalida - fechaHoraEntrada;
+        const diferenciaMs = fechaHoraSalida - fechaHoraEntrada;
         
         if (diferenciaMs < 0) {
             return null; // La salida es antes que la entrada (error)
-        }
-
-        // CORTE AUTOMÁTICO: Si excede 9.5 horas, cortar a 9.5 horas
-        const horasDecimales = diferenciaMs / (1000 * 60 * 60);
-        let horasCortadas = horasDecimales;
-        let huboCorte = false;
-        
-        if (horasDecimales > 9.5) {
-            horasCortadas = 9.5;
-            huboCorte = true;
-            // Ajustar diferenciaMs para reflejar 9.5 horas
-            diferenciaMs = 9.5 * 1000 * 60 * 60;
         }
 
         // Convertir a horas, minutos y segundos
@@ -71,25 +59,16 @@ function calcularTiempoTrabajado(fechaEntrada, horaEntrada, fechaSalida, horaSal
         const segundos = Math.floor((diferenciaMs % (1000 * 60)) / 1000);
 
         // Formatear como "Xh Ym Zs" o "X horas Y minutos"
-        let resultado = '';
         if (horas > 0) {
             if (minutos > 0) {
-                resultado = `${horas}h ${minutos}m`;
-            } else {
-                resultado = `${horas}h`;
+                return `${horas}h ${minutos}m`;
             }
+            return `${horas}h`;
         } else if (minutos > 0) {
-            resultado = `${minutos}m`;
+            return `${minutos}m`;
         } else {
-            resultado = `${segundos}s`;
+            return `${segundos}s`;
         }
-        
-        // Agregar flag de corte si hubo corte automático
-        if (huboCorte) {
-            resultado += ' (corte automático)';
-        }
-        
-        return resultado;
     } catch (error) {
         console.error('Error al calcular tiempo trabajado:', error);
         return null;
@@ -167,57 +146,20 @@ router.post('/registrar', (req, res) => {
                     [empleado.id],
                     (err, ultimaEntrada) => {
                         let tiempoTrabajado = null;
-                        let horasOriginales = null;
-                        let huboCorte = false;
-                        
                         if (!err && ultimaEntrada) {
-                            // Calcular horas originales (sin corte)
-                            const parsearFechaHora = (fecha, hora) => {
-                                const [dia, mes, año] = fecha.split('/');
-                                const horaUpper = hora.toUpperCase();
-                                const esPM = horaUpper.includes('P.M.') || horaUpper.includes('PM') || horaUpper.includes('P. M.');
-                                const esAM = horaUpper.includes('A.M.') || horaUpper.includes('AM') || horaUpper.includes('A. M.');
-                                const partesHora = hora.match(/(\d+):(\d+):(\d+)/);
-                                
-                                if (partesHora) {
-                                    let horas = parseInt(partesHora[1]);
-                                    const minutos = parseInt(partesHora[2]);
-                                    const segundos = parseInt(partesHora[3]);
-                                    
-                                    if (esPM && horas !== 12) horas += 12;
-                                    else if (esAM && horas === 12) horas = 0;
-                                    
-                                    return new Date(parseInt(año), parseInt(mes) - 1, parseInt(dia), horas, minutos, segundos);
-                                }
-                                return null;
-                            };
-                            
-                            const fechaHoraEntrada = parsearFechaHora(ultimaEntrada.fecha, ultimaEntrada.hora);
-                            const fechaHoraSalida = parsearFechaHora(fecha, hora);
-                            
-                            if (fechaHoraEntrada && fechaHoraSalida) {
-                                const diferenciaMs = fechaHoraSalida - fechaHoraEntrada;
-                                horasOriginales = diferenciaMs / (1000 * 60 * 60);
-                                
-                                // Verificar si excede 9.5 horas
-                                if (horasOriginales > 9.5) {
-                                    huboCorte = true;
-                                }
-                            }
-                            
-                            // Calcular tiempo trabajado (con corte automático si aplica)
+                            // Calcular tiempo trabajado
                             tiempoTrabajado = calcularTiempoTrabajado(ultimaEntrada.fecha, ultimaEntrada.hora, fecha, hora);
                         } else if (err) {
                             console.error('❌ Error al buscar última entrada:', err);
                         }
-                        registrarAsistencia(tiempoTrabajado, horasOriginales, huboCorte);
+                        registrarAsistencia(tiempoTrabajado);
                     }
                 );
             } else {
-                registrarAsistencia(null, null, false);
+                registrarAsistencia(null);
             }
 
-            function registrarAsistencia(tiempoTrabajado, horasOriginales, huboCorte) {
+            function registrarAsistencia(tiempoTrabajado) {
                 // Insertar registro de asistencia
                 db.run(
                     `INSERT INTO asistencia (empleado_id, fecha, hora, movimiento, turno, area) 
@@ -231,12 +173,11 @@ router.post('/registrar', (req, res) => {
                             });
                         }
 
-                        const asistenciaId = this.lastID;
                         const respuesta = {
                             success: true,
                             message: `Asistencia registrada: ${movimiento}`,
                             data: {
-                                id: asistenciaId,
+                                id: this.lastID,
                                 empleado: `${empleado.nombre} ${empleado.apellido}`,
                                 fecha,
                                 hora,
@@ -248,23 +189,6 @@ router.post('/registrar', (req, res) => {
                         // Si hay tiempo trabajado, agregarlo a la respuesta
                         if (tiempoTrabajado) {
                             respuesta.data.tiempoTrabajado = tiempoTrabajado;
-                        }
-
-                        // Si hubo corte automático, registrar en la tabla de cortes
-                        if (huboCorte && horasOriginales > 9.5) {
-                            const horasExtra = horasOriginales - 9.5;
-                            db.run(
-                                `INSERT INTO cortes_automaticos (empleado_id, asistencia_id, fecha, horas_originales, horas_cortadas, horas_extra, procesado)
-                                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                                [empleado.id, asistenciaId, fecha, horasOriginales, 9.5, horasExtra, 0],
-                                (err) => {
-                                    if (err) {
-                                        console.error('Error al registrar corte automático:', err);
-                                    } else {
-                                        console.log(`⚠️ Corte automático registrado para ${empleado.nombre} ${empleado.apellido}: ${horasOriginales.toFixed(2)}h -> 9.5h`);
-                                    }
-                                }
-                            );
                         }
 
                         res.json(respuesta);

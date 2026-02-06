@@ -96,74 +96,7 @@
     </div>
 
     <script src="../js/theme.js"></script>
-    <script src="../js/config.js"></script>
     <script>
-        // Verificar cortes automáticos al cargar la página
-        document.addEventListener('DOMContentLoaded', async function() {
-            await verificarCortesAutomaticos();
-        });
-
-        // Verificar y mostrar alertas de cortes automáticos
-        async function verificarCortesAutomaticos() {
-            try {
-                const apiURL = window.API_CONFIG ? window.API_CONFIG.getBaseURL() : 'http://localhost:3000';
-                const response = await fetch(`${apiURL}/api/cortes-automaticos/pendientes`);
-                const data = await response.json();
-
-                if (data.success && data.data && data.data.length > 0) {
-                    // Mostrar alerta para cada corte automático
-                    for (const corte of data.data) {
-                        await mostrarAlertaCorte(corte);
-                    }
-                }
-            } catch (error) {
-                console.error('Error al verificar cortes automáticos:', error);
-            }
-        }
-
-        // Mostrar alerta de corte automático
-        async function mostrarAlertaCorte(corte) {
-            const nombreEmpleado = `${corte.nombre} ${corte.apellido}`;
-            const fechaFormateada = corte.fecha;
-            const horasExtra = corte.horas_extra.toFixed(2);
-
-            const mensaje = `A ${nombreEmpleado} se le hizo corte automático el ${fechaFormateada}.\n\n` +
-                          `Horas originales: ${corte.horas_originales.toFixed(2)}h\n` +
-                          `Horas cortadas: ${corte.horas_cortadas.toFixed(2)}h\n` +
-                          `Horas extra: ${horasExtra}h\n\n` +
-                          `¿Quieres mantener las ${horasExtra} horas extra?`;
-
-            const respuesta = confirm(mensaje + '\n\nOK = Sí, contabilizar horas extra\nCancelar = No, eliminar horas extra (solo 8 horas)');
-
-            try {
-                const apiURL = window.API_CONFIG ? window.API_CONFIG.getBaseURL() : 'http://localhost:3000';
-                const accion = respuesta ? 'mantener' : 'eliminar';
-                
-                const response = await fetch(`${apiURL}/api/cortes-automaticos/${corte.id}/procesar`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ accion: accion })
-                });
-
-                const data = await response.json();
-
-                if (data.success) {
-                    if (accion === 'mantener') {
-                        alert(`✅ Horas extra mantenidas para ${nombreEmpleado}\nSe contabilizarán ${corte.horas_cortadas.toFixed(2)} horas (8h normales + ${horasExtra}h extra)`);
-                    } else {
-                        alert(`✅ Horas extra eliminadas para ${nombreEmpleado}\nSe contabilizarán solo 8 horas`);
-                    }
-                } else {
-                    alert(`❌ Error: ${data.message}`);
-                }
-            } catch (error) {
-                console.error('Error al procesar corte automático:', error);
-                alert('❌ Error al procesar corte automático. Por favor, intenta de nuevo.');
-            }
-        }
-
         // Navegar a diferentes secciones
         function irA(seccion) {
             switch(seccion) {
