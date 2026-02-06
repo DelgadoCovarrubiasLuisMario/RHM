@@ -253,7 +253,28 @@ async function limpiarRegistros() {
 // Cargar historial de registros (todos los registros)
 async function cargarHistorial() {
     try {
-        const res = await fetch(`${getAPIBase()}/api/produccion/listar`);
+        const fechaInicio = document.getElementById('filtroFechaInicioBonos')?.value || '';
+        const fechaFin = document.getElementById('filtroFechaFinBonos')?.value || '';
+        
+        let url = `${getAPIBase()}/api/produccion/listar`;
+        const params = [];
+        
+        if (fechaInicio) {
+            // Convertir de YYYY-MM-DD a DD/MM/YYYY
+            const [año, mes, dia] = fechaInicio.split('-');
+            params.push(`fecha_inicio=${encodeURIComponent(`${dia}/${mes}/${año}`)}`);
+        }
+        if (fechaFin) {
+            // Convertir de YYYY-MM-DD a DD/MM/YYYY
+            const [año, mes, dia] = fechaFin.split('-');
+            params.push(`fecha_fin=${encodeURIComponent(`${dia}/${mes}/${año}`)}`);
+        }
+        
+        if (params.length > 0) {
+            url += '?' + params.join('&');
+        }
+        
+        const res = await fetch(url);
         const data = await res.json();
 
         const lista = document.getElementById('listaHistorial');
@@ -436,6 +457,79 @@ async function eliminarRegistro(id) {
     } catch (error) {
         console.error('Error:', error);
         alert('Error al eliminar registro');
+    }
+}
+
+// Limpiar filtros de bonos
+function limpiarFiltrosBonos() {
+    document.getElementById('filtroFechaInicioBonos').value = '';
+    document.getElementById('filtroFechaFinBonos').value = '';
+    cargarHistorial();
+}
+
+// Generar tickets de bonos (descargar Excel)
+async function generarTicketsBonos() {
+    const fechaInicio = document.getElementById('filtroFechaInicioBonos')?.value || '';
+    const fechaFin = document.getElementById('filtroFechaFinBonos')?.value || '';
+
+    if (!fechaInicio || !fechaFin) {
+        alert('⚠️ Por favor selecciona un rango de fechas (Desde y Hasta)');
+        return;
+    }
+
+    const btnGenerar = document.getElementById('btnGenerarTicketsBonos');
+    const textoOriginal = btnGenerar.textContent;
+    btnGenerar.disabled = true;
+    btnGenerar.textContent = '⏳ Generando...';
+
+    try {
+        // Convertir fechas de YYYY-MM-DD a DD/MM/YYYY
+        const [añoInicio, mesInicio, diaInicio] = fechaInicio.split('-');
+        const [añoFin, mesFin, diaFin] = fechaFin.split('-');
+        const fechaInicioFormato = `${diaInicio}/${mesInicio}/${añoInicio}`;
+        const fechaFinFormato = `${diaFin}/${mesFin}/${añoFin}`;
+        
+        const apiURL = getAPIBase();
+        const url = `${apiURL}/api/produccion/generar-tickets?fecha_inicio=${encodeURIComponent(fechaInicioFormato)}&fecha_fin=${encodeURIComponent(fechaFinFormato)}`;
+        
+        const response = await fetch(url);
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Error al generar tickets');
+        }
+
+        // Obtener el blob del archivo
+        const blob = await response.blob();
+        
+        // Crear URL temporal y descargar
+        const urlDescarga = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = urlDescarga;
+        
+        // Obtener nombre del archivo del header Content-Disposition
+        const contentDisposition = response.headers.get('Content-Disposition');
+        let nombreArchivo = 'tickets_bonos.xlsx';
+        if (contentDisposition) {
+            const matches = contentDisposition.match(/filename="(.+)"/);
+            if (matches && matches[1]) {
+                nombreArchivo = matches[1];
+            }
+        }
+        
+        link.download = nombreArchivo;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(urlDescarga);
+
+        alert(`✅ Tickets generados exitosamente: ${nombreArchivo}`);
+    } catch (error) {
+        console.error('Error al generar tickets:', error);
+        alert(`❌ Error al generar tickets: ${error.message}`);
+    } finally {
+        btnGenerar.disabled = false;
+        btnGenerar.textContent = textoOriginal;
     }
 }
 

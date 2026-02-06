@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const XLSX = require('xlsx');
 const { getDB } = require('../database/db');
 
 // Función para calcular puntos por rango
@@ -407,6 +408,138 @@ router.delete('/limpiar/registros', (req, res) => {
             message: `${this.changes} registro(s) eliminado(s) correctamente`,
             registros_eliminados: this.changes
         });
+    });
+});
+
+// Generar tickets de bonos (Excel)
+router.get('/generar-tickets', (req, res) => {
+    const { fecha_inicio, fecha_fin } = req.query;
+    const db = getDB();
+
+    if (!fecha_inicio || !fecha_fin) {
+        return res.status(400).json({
+            success: false,
+            message: 'fecha_inicio y fecha_fin son requeridos (formato: DD/MM/YYYY)'
+        });
+    }
+
+    let query = `
+        SELECT 
+            p.id,
+            p.fecha,
+            p.turno,
+            p.toneladas,
+            p.puntos_rango_25_30,
+            p.puntos_rango_30_35,
+            p.puntos_rango_35_40,
+            p.puntos_rango_40_plus,
+            p.nombre_encargado,
+            p.comentarios,
+            COALESCE(e.nombre, '') as nombre,
+            COALESCE(e.apellido, '') as apellido,
+            e.codigo as codigo_empleado
+        FROM produccion_trituracion p
+        LEFT JOIN empleados e ON p.empleado_id = e.id
+        WHERE p.fecha >= ? AND p.fecha <= ?
+        ORDER BY p.fecha DESC, p.turno ASC
+    `;
+
+    db.all(query, [fecha_inicio, fecha_fin], (err, registros) => {
+        if (err) {
+            return res.status(500).json({
+                success: false,
+                message: 'Error al obtener registros: ' + err.message
+            });
+        }
+
+        if (registros.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'No hay registros en el rango de fechas seleccionado'
+            });
+        }
+
+        try {
+            // Preparar datos para Excel
+            const datosExcel = [];
+
+            // Encabezados
+            datosExcel.push([
+                'ID',
+                'Fecha',
+                'Encargado',
+                'Código Empleado',
+                'Turno',
+                'Toneladas',
+                'Rango 25-30',
+                'Rango 30-35',
+                'Rango 35-40',
+                'Rango 40+',
+                'Comentarios'
+            ]);
+
+            // Agregar datos de cada registro
+            registros.forEach(reg => {
+                const nombreMostrar = reg.nombre_encargado || `${reg.nombre} ${reg.apellido}`.trim() || 'N/A';
+                const codigoMostrar = reg.codigo_empleado || '-';
+
+                datosExcel.push([
+                    reg.id,
+                    reg.fecha,
+                    nombreMostrar,
+                    codigoMostrar,
+                    `Turno ${reg.turno}`,
+                    parseFloat(reg.toneladas || 0).toFixed(2),
+                    parseFloat(reg.puntos_rango_25_30 || 0).toFixed(2),
+                    parseFloat(reg.puntos_rango_30_35 || 0).toFixed(2),
+                    parseFloat(reg.puntos_rango_35_40 || 0).toFixed(2),
+                    parseFloat(reg.puntos_rango_40_plus || 0).toFixed(2),
+                    reg.comentarios || '-'
+                ]);
+            });
+
+            // Crear libro de Excel
+            const workbook = XLSX.utils.book_new();
+            const worksheet = XLSX.utils.aoa_to_sheet(datosExcel);
+
+            // Ajustar ancho de columnas
+            const columnWidths = [
+                { wch: 8 },   // ID
+                { wch: 12 }, // Fecha
+                { wch: 20 }, // Encargado
+                { wch: 15 }, // Código Empleado
+                { wch: 10 }, // Turno
+                { wch: 12 }, // Toneladas
+                { wch: 12 }, // Rango 25-30
+                { wch: 12 }, // Rango 30-35
+                { wch: 12 }, // Rango 35-40
+                { wch: 12 }, // Rango 40+
+                { wch: 30 }  // Comentarios
+            ];
+            worksheet['!cols'] = columnWidths;
+
+            // Agregar hoja al libro
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'Tickets Bonos');
+
+            // Generar nombre de archivo
+            const fechaInicio = fecha_inicio.replace(/\//g, '');
+            const fechaFin = fecha_fin.replace(/\//g, '');
+            const nombreArchivo = `tickets_bonos_${fechaInicio}_${fechaFin}.xlsx`;
+
+            // Generar buffer del archivo
+            const excelBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+            // Enviar archivo
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`);
+            res.send(excelBuffer);
+        } catch (error) {
+            console.error('Error al generar archivo Excel:', error);
+            return res.status(500).json({
+                success: false,
+                message: 'Error al generar archivo de tickets: ' + error.message
+            });
+        }
     });
 });
 
