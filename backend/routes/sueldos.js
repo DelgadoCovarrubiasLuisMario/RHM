@@ -419,16 +419,6 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
                             es_domingo: false
                         });
                     }
-                } else {
-                    // Domingo: todas las horas son extras
-                    diasTrabajados++;
-                    horasExtrasSemanales += horasTrabajadas;
-                    horasExtrasPorDia.push({
-                        fecha,
-                        horas_extras: horasTrabajadas,
-                        es_domingo: true
-                    });
-                }
                     
                     // Calcular horas turno por día
                     let horasTurnoDia = 0;
@@ -444,6 +434,9 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
                     if (horasTurnoSemana > 6) {
                         horasTurnoSemana = 6; // Limitar a 6 horas por semana
                     }
+                } else {
+                    // Domingo: TODAS las horas se cuentan como horas extras (dobles/triples según acumulación semanal)
+                    horasExtrasSemanales += horasTrabajadas;
                 } else {
                     // Domingo: TODAS las horas se cuentan como horas extras (dobles/triples según acumulación semanal)
                     horasExtrasSemanales += horasTrabajadas;
