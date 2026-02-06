@@ -785,9 +785,29 @@ router.get('/listar', (req, res) => {
                                         }
 
                                         const vacacionesArray = vacaciones || [];
-                                        const calculo = calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, fechaFin, descuentosVarios, vacacionesArray, empleado.nombre, empleado.apellido);
                                         
-                                        sueldos.push({
+                                        // Obtener cortes automáticos del empleado para el período
+                                        db.all(
+                                            `SELECT fecha, asistencia_id, accion_admin 
+                                             FROM cortes_automaticos 
+                                             WHERE empleado_id = ? 
+                                             AND fecha >= ? 
+                                             AND fecha <= ? 
+                                             AND procesado = 1`,
+                                            [empleado.id, fechaInicio, fechaFin],
+                                            (err, cortes) => {
+                                                if (err) {
+                                                    console.error('Error al obtener cortes automáticos:', err);
+                                                }
+                                                
+                                                const cortesMap = {};
+                                                (cortes || []).forEach(corte => {
+                                                    cortesMap[corte.fecha] = corte.accion_admin;
+                                                });
+                                                
+                                                const calculo = calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, fechaFin, descuentosVarios, vacacionesArray, empleado.nombre, empleado.apellido, empleado.id, cortesMap);
+                                        
+                                                sueldos.push({
                                             empleado_id: empleado.id,
                                             empleado: `${empleado.nombre} ${empleado.apellido}`,
                                             sueldo_base: sueldoBase,
@@ -900,26 +920,45 @@ router.post('/pagar/:empleado_id', (req, res) => {
 
                                     const vacacionesArray = vacaciones || [];
                                     
-                                    // Calcular sueldo completo
-                                    const calculo = calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fecha_inicio, fecha_fin, descuentosVarios, vacacionesArray, empleado.nombre, empleado.apellido);
+                                    // Obtener cortes automáticos del empleado para el período
+                                    db.all(
+                                        `SELECT fecha, asistencia_id, accion_admin 
+                                         FROM cortes_automaticos 
+                                         WHERE empleado_id = ? 
+                                         AND fecha >= ? 
+                                         AND fecha <= ? 
+                                         AND procesado = 1`,
+                                        [empleado_id, fecha_inicio, fecha_fin],
+                                        (err, cortes) => {
+                                            if (err) {
+                                                console.error('Error al obtener cortes automáticos:', err);
+                                            }
+                                            
+                                            const cortesMap = {};
+                                            (cortes || []).forEach(corte => {
+                                                cortesMap[corte.fecha] = corte.accion_admin;
+                                            });
+                                            
+                                            // Calcular sueldo completo
+                                            const calculo = calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fecha_inicio, fecha_fin, descuentosVarios, vacacionesArray, empleado.nombre, empleado.apellido, empleado_id, cortesMap);
                                     
-                                    const desgloseJSON = JSON.stringify({
-                                        empleado: `${empleado.nombre} ${empleado.apellido}`,
-                                        periodo: {
-                                            fecha_inicio: fecha_inicio,
-                                            fecha_fin: fecha_fin
-                                        },
-                                        sueldo_base: sueldoBase,
-                                        pago_por_hora: pagoPorHora,
-                                        ...calculo
-                                    });
+                                            const desgloseJSON = JSON.stringify({
+                                                empleado: `${empleado.nombre} ${empleado.apellido}`,
+                                                periodo: {
+                                                    fecha_inicio: fecha_inicio,
+                                                    fecha_fin: fecha_fin
+                                                },
+                                                sueldo_base: sueldoBase,
+                                                pago_por_hora: pagoPorHora,
+                                                ...calculo
+                                            });
 
-                                    // Guardar en historial de pagos
-                                    db.run(
-                                        `INSERT INTO pagos (empleado_id, fecha_inicio, fecha_fin, area, sueldo_base, total_pagado, desglose)
-                                         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                                        [empleado_id, fecha_inicio, fecha_fin, null, sueldoBase, calculo.total, desgloseJSON],
-                                        function(err) {
+                                            // Guardar en historial de pagos
+                                            db.run(
+                                                `INSERT INTO pagos (empleado_id, fecha_inicio, fecha_fin, area, sueldo_base, total_pagado, desglose)
+                                                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                                                [empleado_id, fecha_inicio, fecha_fin, null, sueldoBase, calculo.total, desgloseJSON],
+                                                function(err) {
                                     if (err) {
                                         return res.status(500).json({ 
                                             success: false, 
