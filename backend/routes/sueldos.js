@@ -847,9 +847,36 @@ router.get('/listar', (req, res) => {
                                         }
 
                                         const vacacionesArray = vacaciones || [];
-                                        const calculo = calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, fechaFin, descuentosVarios, vacacionesArray, empleado.nombre, empleado.apellido);
                                         
-                                        sueldos.push({
+                                        // Obtener cortes rechazados para este empleado y período
+                                        db.all(
+                                            `SELECT fecha FROM cortes_automaticos 
+                                             WHERE empleado_id = ? 
+                                             AND fecha BETWEEN ? AND ?
+                                             AND estado = 'rechazado'`,
+                                            [empleado.id, fechaInicio, fechaFin],
+                                            (err, cortesRechazados) => {
+                                                if (err) {
+                                                    console.error('Error al obtener cortes rechazados:', err);
+                                                }
+                                                
+                                                const fechasCortesRechazados = (cortesRechazados || []).map(c => c.fecha);
+                                                
+                                                const calculo = calcularSueldoSemanal(
+                                                    registros, 
+                                                    sueldoBase, 
+                                                    pagoPorHora, 
+                                                    fechaInicio, 
+                                                    fechaFin, 
+                                                    descuentosVarios, 
+                                                    vacacionesArray, 
+                                                    empleado.nombre, 
+                                                    empleado.apellido,
+                                                    empleado.id,
+                                                    fechasCortesRechazados
+                                                );
+                                        
+                                                sueldos.push({
                                             empleado_id: empleado.id,
                                             empleado: `${empleado.nombre} ${empleado.apellido}`,
                                             sueldo_base: sueldoBase,
@@ -861,21 +888,24 @@ router.get('/listar', (req, res) => {
                                             ...calculo
                                         });
                                         
-                                        procesados++;
-                                        if (procesados === empleados.length) {
-                                            res.json({
-                                                success: true,
-                                                periodo: {
-                                                    fecha_inicio: fechaInicio,
-                                                    fecha_fin: fechaFin
-                                                },
-                                                data: sueldos,
-                                                total: sueldos.length
-                                            });
+                                                    procesados++;
+                                                    if (procesados === empleados.length) {
+                                                        res.json({
+                                                            success: true,
+                                                            periodo: {
+                                                                fecha_inicio: fechaInicio,
+                                                                fecha_fin: fechaFin
+                                                            },
+                                                            data: sueldos,
+                                                            total: sueldos.length
+                                                        });
+                                                    }
+                                                }
+                                            );
                                         }
-                                    }
-                                );
-                            }
+                                    );
+                                }
+                            );
                         );
                     }
                 );
@@ -962,8 +992,34 @@ router.post('/pagar/:empleado_id', (req, res) => {
 
                                     const vacacionesArray = vacaciones || [];
                                     
-                                    // Calcular sueldo completo
-                                    const calculo = calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fecha_inicio, fecha_fin, descuentosVarios, vacacionesArray, empleado.nombre, empleado.apellido);
+                                    // Obtener cortes rechazados para este empleado y período
+                                    db.all(
+                                        `SELECT fecha FROM cortes_automaticos 
+                                         WHERE empleado_id = ? 
+                                         AND fecha BETWEEN ? AND ?
+                                         AND estado = 'rechazado'`,
+                                        [empleado_id, fecha_inicio, fecha_fin],
+                                        (err, cortesRechazados) => {
+                                            if (err) {
+                                                console.error('Error al obtener cortes rechazados:', err);
+                                            }
+                                            
+                                            const fechasCortesRechazados = (cortesRechazados || []).map(c => c.fecha);
+                                            
+                                            // Calcular sueldo completo
+                                            const calculo = calcularSueldoSemanal(
+                                                registros, 
+                                                sueldoBase, 
+                                                pagoPorHora, 
+                                                fecha_inicio, 
+                                                fecha_fin, 
+                                                descuentosVarios, 
+                                                vacacionesArray, 
+                                                empleado.nombre, 
+                                                empleado.apellido,
+                                                empleado_id,
+                                                fechasCortesRechazados
+                                            );
                                     
                                     const desgloseJSON = JSON.stringify({
                                         empleado: `${empleado.nombre} ${empleado.apellido}`,
