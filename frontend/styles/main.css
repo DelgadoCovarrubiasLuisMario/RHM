@@ -1306,6 +1306,23 @@ textarea {
     min-width: 150px;
 }
 
+.empleado-foto-wrapper {
+    cursor: pointer;
+    transition: opacity 0.3s, transform 0.2s;
+    border-radius: 8px;
+    overflow: hidden;
+    width: 120px;
+    height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.empleado-foto-wrapper:hover {
+    opacity: 0.8;
+    transform: scale(1.05);
+}
+
 .empleado-foto,
 .empleado-foto-placeholder {
     width: 120px;
@@ -1318,10 +1335,20 @@ textarea {
 
 .empleado-foto-placeholder {
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     font-size: 3rem;
     color: var(--text-secondary);
+    width: 100%;
+    height: 100%;
+}
+
+.empleado-foto-placeholder small {
+    font-size: 0.7rem;
+    margin-top: 0.5rem;
+    color: var(--text-secondary);
+    opacity: 0.8;
 }
 
 .empleado-qr-container {
