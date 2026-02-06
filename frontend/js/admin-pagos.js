@@ -18,11 +18,17 @@ async function cargarPagos() {
         
         // Cargar todos los pagos sin filtrar por área
         let url = `${apiURL}/api/pagos/listar`;
+        const params = [];
+        
         if (fechaInicio) {
-            url += `&fecha_desde=${encodeURIComponent(fechaInicio)}`;
+            params.push(`fecha_desde=${encodeURIComponent(fechaInicio)}`);
         }
         if (fechaFin) {
-            url += `&fecha_hasta=${encodeURIComponent(fechaFin)}`;
+            params.push(`fecha_hasta=${encodeURIComponent(fechaFin)}`);
+        }
+        
+        if (params.length > 0) {
+            url += '?' + params.join('&');
         }
 
         const response = await fetch(url);
