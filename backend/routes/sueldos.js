@@ -911,6 +911,7 @@ router.get('/listar', (req, res) => {
             });
         }
     );
+    });
 });
 
 // Pagar sueldo a un empleado (elimina asistencia y descuentos, guarda en historial)
