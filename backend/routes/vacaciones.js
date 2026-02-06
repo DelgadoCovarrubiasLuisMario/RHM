@@ -119,7 +119,7 @@ router.get('/empleado/:empleado_id/disponibles', (req, res) => {
     );
 });
 
-// Función auxiliar para calcular días entre dos fechas (DD/MM/YYYY)
+// Función auxiliar para calcular días entre dos fechas (DD/MM/YYYY) excluyendo domingos
 function calcularDiasEntreFechas(fechaInicio, fechaFin) {
     const [diaInicio, mesInicio, añoInicio] = fechaInicio.split('/').map(Number);
     const [diaFin, mesFin, añoFin] = fechaFin.split('/').map(Number);
@@ -127,10 +127,23 @@ function calcularDiasEntreFechas(fechaInicio, fechaFin) {
     const inicio = new Date(añoInicio, mesInicio - 1, diaInicio);
     const fin = new Date(añoFin, mesFin - 1, diaFin);
     
-    const diffTime = Math.abs(fin - inicio);
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 para incluir ambos días
+    // Iterar día por día desde inicio hasta fin (inclusive)
+    let diasContados = 0;
+    const fechaActual = new Date(inicio);
     
-    return diffDays;
+    // Asegurarse de que fechaActual no sea mayor que fin
+    while (fechaActual <= fin) {
+        // getDay() retorna 0 para domingo, 1 para lunes, etc.
+        // Si no es domingo (getDay() !== 0), contar el día
+        if (fechaActual.getDay() !== 0) {
+            diasContados++;
+        }
+        
+        // Avanzar al siguiente día
+        fechaActual.setDate(fechaActual.getDate() + 1);
+    }
+    
+    return diasContados;
 }
 
 // Función auxiliar para obtener el año de una fecha (DD/MM/YYYY)
