@@ -527,75 +527,67 @@ router.get('/listar', (req, res) => {
 // Obtener jornadas cerradas automáticamente recientes (últimas 24 horas)
 router.get('/cortes-automaticos', (req, res) => {
     const db = getDB();
-    
-    // Obtener fecha/hora de hace 24 horas
     const ahora = new Date();
-    const hace24Horas = new Date(ahora.getTime() - 24 * 60 * 60 * 1000);
     
-    // Buscar salidas automáticas (que fueron cerradas automáticamente)
-    // Las identificamos porque la hora de salida es exactamente entrada + 9.5 horas
-    // y no hay otra entrada entre la entrada y la salida
+    // Obtener todas las salidas de las últimas 24 horas
+    const fechaHace24Horas = new Date(ahora.getTime() - 24 * 60 * 60 * 1000);
+    const fechaHace24HorasStr = fechaHace24Horas.toLocaleDateString('es-MX', { 
+        day: '2-digit', 
+        month: '2-digit', 
+        year: 'numeric' 
+    });
+    
+    // Buscar salidas recientes y verificar si fueron automáticas
     const query = `
         SELECT 
-            a_entrada.id as entrada_id,
-            a_entrada.empleado_id,
-            a_entrada.fecha as fecha_entrada,
-            a_entrada.hora as hora_entrada,
+            a_salida.id as salida_id,
+            a_salida.empleado_id,
             a_salida.fecha as fecha_salida,
             a_salida.hora as hora_salida,
-            a_salida.id as salida_id,
+            a_entrada.fecha as fecha_entrada,
+            a_entrada.hora as hora_entrada,
             e.nombre,
             e.apellido,
             e.codigo
-        FROM asistencia a_entrada
-        INNER JOIN asistencia a_salida ON a_salida.empleado_id = a_entrada.empleado_id
-            AND a_salida.movimiento = 'SALIDA'
+        FROM asistencia a_salida
+        INNER JOIN empleados e ON a_salida.empleado_id = e.id
+        INNER JOIN asistencia a_entrada ON a_entrada.empleado_id = a_salida.empleado_id
+            AND a_entrada.movimiento IN ('ENTRADA', 'INGRESO')
             AND (
-                a_salida.fecha > a_entrada.fecha OR 
-                (a_salida.fecha = a_entrada.fecha AND a_salida.hora > a_entrada.hora)
+                a_entrada.fecha < a_salida.fecha OR 
+                (a_entrada.fecha = a_salida.fecha AND a_entrada.hora < a_salida.hora)
             )
-        INNER JOIN empleados e ON a_entrada.empleado_id = e.id
-        WHERE a_entrada.movimiento IN ('ENTRADA', 'INGRESO')
-        AND NOT EXISTS (
-            SELECT 1 FROM asistencia a_entre
-            WHERE a_entre.empleado_id = a_entrada.empleado_id
-            AND a_entre.movimiento IN ('ENTRADA', 'INGRESO')
-            AND (
-                (a_entre.fecha = a_entrada.fecha AND a_entre.hora > a_entrada.hora) OR
-                a_entre.fecha > a_entrada.fecha
-            )
-            AND (
-                (a_entre.fecha = a_salida.fecha AND a_entre.hora < a_salida.hora) OR
-                a_entre.fecha < a_salida.fecha
-            )
-        )
-        AND a_salida.id = (
+        WHERE a_salida.movimiento = 'SALIDA'
+        AND a_salida.fecha >= ?
+        AND a_entrada.id = (
             SELECT a2.id FROM asistencia a2
-            WHERE a2.empleado_id = a_entrada.empleado_id
-            AND a2.movimiento = 'SALIDA'
+            WHERE a2.empleado_id = a_salida.empleado_id
+            AND a2.movimiento IN ('ENTRADA', 'INGRESO')
             AND (
-                a2.fecha > a_entrada.fecha OR 
-                (a2.fecha = a_entrada.fecha AND a2.hora > a_entrada.hora)
+                a2.fecha < a_salida.fecha OR 
+                (a2.fecha = a_salida.fecha AND a2.hora < a_salida.hora)
             )
-            ORDER BY a2.fecha ASC, a2.hora ASC
+            ORDER BY a2.fecha DESC, a2.hora DESC
             LIMIT 1
         )
-        AND a_entrada.id = (
-            SELECT a3.id FROM asistencia a3
-            WHERE a3.empleado_id = a_entrada.empleado_id
+        AND NOT EXISTS (
+            SELECT 1 FROM asistencia a3
+            WHERE a3.empleado_id = a_salida.empleado_id
             AND a3.movimiento IN ('ENTRADA', 'INGRESO')
             AND (
-                a3.fecha < a_salida.fecha OR 
-                (a3.fecha = a_salida.fecha AND a3.hora < a_salida.hora)
+                (a3.fecha = a_entrada.fecha AND a3.hora > a_entrada.hora) OR
+                a3.fecha > a_entrada.fecha
             )
-            ORDER BY a3.fecha DESC, a3.hora DESC
-            LIMIT 1
+            AND (
+                (a3.fecha = a_salida.fecha AND a3.hora < a_salida.hora) OR
+                a3.fecha < a_salida.fecha
+            )
         )
         ORDER BY a_salida.fecha DESC, a_salida.hora DESC
-        LIMIT 50
+        LIMIT 100
     `;
     
-    db.all(query, [], (err, registros) => {
+    db.all(query, [fechaHace24HorasStr], (err, registros) => {
         if (err) {
             return res.status(500).json({
                 success: false,
@@ -617,7 +609,7 @@ router.get('/cortes-automaticos', (req, res) => {
                 if (Math.abs(horasTrabajadas - 9.5) < 0.1) {
                     // Verificar que la salida fue en las últimas 24 horas
                     const horasDesdeSalida = (ahora - fechaHoraSalida) / (1000 * 60 * 60);
-                    if (horasDesdeSalida <= 24) {
+                    if (horasDesdeSalida <= 24 && horasDesdeSalida >= 0) {
                         cortesAutomaticos.push({
                             empleado_id: reg.empleado_id,
                             nombre: reg.nombre,
