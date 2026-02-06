@@ -635,6 +635,62 @@ router.get('/cortes-automaticos', (req, res) => {
     });
 });
 
+// Eliminar registro de asistencia
+router.delete('/:id', (req, res) => {
+    const { id } = req.params;
+    const db = getDB();
+
+    // Obtener información del registro antes de eliminar
+    db.get(
+        `SELECT a.id, a.fecha, a.hora, a.movimiento, e.nombre || ' ' || e.apellido as nombre_empleado
+         FROM asistencia a
+         INNER JOIN empleados e ON a.empleado_id = e.id
+         WHERE a.id = ?`,
+        [id],
+        (err, registro) => {
+            if (err) {
+                return res.status(500).json({ 
+                    success: false, 
+                    message: 'Error al obtener información del registro: ' + err.message 
+                });
+            }
+
+            if (!registro) {
+                return res.status(404).json({ 
+                    success: false, 
+                    message: 'Registro de asistencia no encontrado' 
+                });
+            }
+
+            // Eliminar el registro
+            db.run(
+                `DELETE FROM asistencia WHERE id = ?`,
+                [id],
+                function(err) {
+                    if (err) {
+                        return res.status(500).json({ 
+                            success: false, 
+                            message: 'Error al eliminar registro: ' + err.message 
+                        });
+                    }
+
+                    if (this.changes === 0) {
+                        return res.status(404).json({ 
+                            success: false, 
+                            message: 'Registro no encontrado' 
+                        });
+                    }
+
+                    res.json({
+                        success: true,
+                        message: `Registro de asistencia eliminado para ${registro.nombre_empleado} (${registro.fecha} ${registro.hora})`
+                    });
+                }
+            );
+        }
+    );
+});
+
 module.exports = router;
 module.exports.cerrarJornadasAutomaticamente = cerrarJornadasAutomaticamente;
 

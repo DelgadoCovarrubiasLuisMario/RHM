@@ -110,6 +110,11 @@ function mostrarAsistencia(registros, area) {
                     </div>
                     ` : ''}
                 </div>
+                <div class="asistencia-actions">
+                    <button class="btn btn-danger btn-sm" onclick="eliminarAsistencia(${registro.id}, '${nombreCompleto.replace(/'/g, "\\'")}', '${registro.fecha}', '${registro.hora}')" title="Eliminar registro">
+                        🗑️ Eliminar
+                    </button>
+                </div>
             </div>
         `;
     });
@@ -162,6 +167,32 @@ function ampliarFoto(fotoSrc, nombreEmpleado) {
     modal.onclick = () => {
         document.body.removeChild(modal);
     };
+}
+
+// Eliminar registro de asistencia
+async function eliminarAsistencia(asistenciaId, nombreEmpleado, fecha, hora) {
+    if (!confirm(`¿Estás seguro de eliminar este registro de asistencia?\n\nEmpleado: ${nombreEmpleado}\nFecha: ${fecha}\nHora: ${hora}\n\nEsta acción no se puede deshacer.`)) {
+        return;
+    }
+
+    try {
+        const apiURL = window.API_CONFIG ? window.API_CONFIG.getBaseURL() : 'http://localhost:3000';
+        const response = await fetch(`${apiURL}/api/asistencia/${asistenciaId}`, {
+            method: 'DELETE'
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            alert(`✅ ${data.message}`);
+            cargarAsistencia(); // Recargar lista
+        } else {
+            alert(`❌ Error: ${data.message}`);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('❌ Error de conexión. Verifica que el servidor esté corriendo.');
+    }
 }
 
 // Volver al menú principal
