@@ -1015,17 +1015,6 @@ router.post('/pagar/:empleado_id', (req, res) => {
         }
     );
 });
-                                        }
-                                    );
-                                }
-                            );
-                        }
-                    );
-                }
-            );
-        }
-    );
-});
 
 module.exports = router;
 
