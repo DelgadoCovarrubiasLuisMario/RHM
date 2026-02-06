@@ -75,8 +75,169 @@ function calcularTiempoTrabajado(fechaEntrada, horaEntrada, fechaSalida, horaSal
     }
 }
 
+// Función para parsear fecha y hora a objeto Date
+function parsearFechaHora(fecha, hora) {
+    try {
+        const [dia, mes, año] = fecha.split('/');
+        const horaUpper = hora.toUpperCase();
+        const esPM = horaUpper.includes('P.M.') || horaUpper.includes('PM') || horaUpper.includes('P. M.');
+        const esAM = horaUpper.includes('A.M.') || horaUpper.includes('AM') || horaUpper.includes('A. M.');
+        
+        const partesHora = hora.match(/(\d+):(\d+):(\d+)/);
+        
+        if (partesHora) {
+            let horas = parseInt(partesHora[1]);
+            const minutos = parseInt(partesHora[2]);
+            const segundos = parseInt(partesHora[3]);
+            
+            if (esPM && horas !== 12) {
+                horas += 12;
+            } else if (esAM && horas === 12) {
+                horas = 0;
+            }
+            
+            return new Date(parseInt(año), parseInt(mes) - 1, parseInt(dia), horas, minutos, segundos);
+        }
+        return null;
+    } catch (error) {
+        console.error('Error al parsear fecha/hora:', fecha, hora, error);
+        return null;
+    }
+}
+
+// Función para calcular horas trabajadas en decimal
+function calcularHorasTrabajadasDecimal(fechaEntrada, horaEntrada, fechaSalida, horaSalida) {
+    const fechaHoraEntrada = parsearFechaHora(fechaEntrada, horaEntrada);
+    const fechaHoraSalida = parsearFechaHora(fechaSalida, horaSalida);
+    
+    if (!fechaHoraEntrada || !fechaHoraSalida) {
+        return 0;
+    }
+    
+    const diferenciaMs = fechaHoraSalida - fechaHoraEntrada;
+    if (diferenciaMs < 0) {
+        return 0;
+    }
+    
+    return diferenciaMs / (1000 * 60 * 60); // Convertir a horas decimales
+}
+
+// Función para cerrar jornadas automáticamente a las 9.5 horas
+function cerrarJornadasAutomaticamente(db, empleadoId = null) {
+    return new Promise((resolve, reject) => {
+        // Buscar todas las entradas sin salida (última entrada de cada empleado que no tenga salida después)
+        let query = `
+            SELECT a1.id, a1.empleado_id, a1.fecha, a1.hora, a1.turno, a1.area,
+                   e.nombre, e.apellido
+            FROM asistencia a1
+            INNER JOIN empleados e ON a1.empleado_id = e.id
+            WHERE a1.movimiento IN ('ENTRADA', 'INGRESO')
+            AND a1.id = (
+                SELECT a2.id FROM asistencia a2
+                WHERE a2.empleado_id = a1.empleado_id
+                AND a2.movimiento IN ('ENTRADA', 'INGRESO')
+                ORDER BY a2.fecha DESC, a2.hora DESC
+                LIMIT 1
+            )
+            AND NOT EXISTS (
+                SELECT 1 FROM asistencia a3
+                WHERE a3.empleado_id = a1.empleado_id
+                AND a3.movimiento = 'SALIDA'
+                AND (
+                    a3.fecha > a1.fecha OR 
+                    (a3.fecha = a1.fecha AND a3.hora > a1.hora)
+                )
+            )
+        `;
+        
+        const params = [];
+        if (empleadoId) {
+            query += ' AND a1.empleado_id = ?';
+            params.push(empleadoId);
+        }
+        
+        db.all(query, params, (err, entradasPendientes) => {
+            if (err) {
+                return reject(err);
+            }
+            
+            if (entradasPendientes.length === 0) {
+                return resolve({ cerradas: 0, mensajes: [] });
+            }
+            
+            const ahora = new Date();
+            let cerradas = 0;
+            const mensajes = [];
+            let procesadas = 0;
+            
+            if (entradasPendientes.length === 0) {
+                return resolve({ cerradas: 0, mensajes: [] });
+            }
+            
+            entradasPendientes.forEach(entrada => {
+                const fechaHoraEntrada = parsearFechaHora(entrada.fecha, entrada.hora);
+                if (!fechaHoraEntrada) {
+                    procesadas++;
+                    if (procesadas === entradasPendientes.length) {
+                        resolve({ cerradas, mensajes });
+                    }
+                    return;
+                }
+                
+                // Calcular horas transcurridas
+                const horasTranscurridas = (ahora - fechaHoraEntrada) / (1000 * 60 * 60);
+                
+                // Si han pasado 9.5 horas o más, cerrar automáticamente
+                if (horasTranscurridas >= 9.5) {
+                    // Calcular hora de salida (entrada + 9.5 horas)
+                    const fechaHoraSalida = new Date(fechaHoraEntrada);
+                    fechaHoraSalida.setHours(fechaHoraSalida.getHours() + 9);
+                    fechaHoraSalida.setMinutes(fechaHoraSalida.getMinutes() + 30);
+                    
+                    const fechaSalida = fechaHoraSalida.toLocaleDateString('es-MX', { 
+                        day: '2-digit', 
+                        month: '2-digit', 
+                        year: 'numeric' 
+                    });
+                    const horaSalida = fechaHoraSalida.toLocaleTimeString('es-MX', { 
+                        hour: '2-digit', 
+                        minute: '2-digit', 
+                        second: '2-digit',
+                        hour12: true 
+                    });
+                    
+                    // Registrar salida automática
+                    db.run(
+                        `INSERT INTO asistencia (empleado_id, fecha, hora, movimiento, turno, area) 
+                         VALUES (?, ?, ?, 'SALIDA', ?, ?)`,
+                        [entrada.empleado_id, fechaSalida, horaSalida, entrada.turno, entrada.area],
+                        function(err) {
+                            if (err) {
+                                console.error(`Error al cerrar jornada automática para ${entrada.nombre} ${entrada.apellido}:`, err);
+                            } else {
+                                cerradas++;
+                                mensajes.push(`${entrada.nombre} ${entrada.apellido}: Jornada cerrada automáticamente a las 9.5 horas`);
+                            }
+                            
+                            procesadas++;
+                            if (procesadas === entradasPendientes.length) {
+                                resolve({ cerradas, mensajes });
+                            }
+                        }
+                    );
+                } else {
+                    procesadas++;
+                    if (procesadas === entradasPendientes.length) {
+                        resolve({ cerradas, mensajes });
+                    }
+                }
+            });
+        });
+    });
+}
+
 // Registrar asistencia (empleado escanea QR)
-router.post('/registrar', (req, res) => {
+router.post('/registrar', async (req, res) => {
     const { codigo, movimiento, turno } = req.body;
     const db = getDB();
 
@@ -121,7 +282,7 @@ router.post('/registrar', (req, res) => {
     // Buscar empleado por código
     db.get('SELECT id, nombre, apellido FROM empleados WHERE codigo = ? AND activo = 1', 
         [codigo], 
-        (err, empleado) => {
+        async (err, empleado) => {
             if (err) {
                 return res.status(500).json({ 
                     success: false, 
@@ -134,6 +295,16 @@ router.post('/registrar', (req, res) => {
                     success: false, 
                     message: 'Empleado no encontrado o inactivo' 
                 });
+            }
+
+            // Si es una ENTRADA, verificar y cerrar jornadas pendientes del mismo empleado
+            if (movimiento === 'ENTRADA' || movimiento === 'INGRESO') {
+                try {
+                    await cerrarJornadasAutomaticamente(db, empleado.id);
+                } catch (error) {
+                    console.error('Error al cerrar jornadas pendientes:', error);
+                    // Continuar con el registro aunque falle el cierre automático
+                }
             }
 
             // Si es una salida, buscar la última entrada para calcular tiempo trabajado

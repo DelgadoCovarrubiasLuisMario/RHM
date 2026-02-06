@@ -161,6 +161,31 @@ function limpiarRegistrosAntiguos() {
     }
 }
 
+// Función para cerrar jornadas automáticamente (proceso periódico)
+function cerrarJornadasPendientes() {
+    const { getDB } = require('./database/db');
+    const db = getDB();
+    
+    if (!db) {
+        console.log('⚠️ Base de datos no inicializada, no se pueden cerrar jornadas');
+        return;
+    }
+
+    // Importar función de cierre automático
+    const { cerrarJornadasAutomaticamente } = require('./routes/asistencia');
+    
+    cerrarJornadasAutomaticamente(db)
+        .then(resultado => {
+            if (resultado.cerradas > 0) {
+                console.log(`✅ ${resultado.cerradas} jornada(s) cerrada(s) automáticamente`);
+                resultado.mensajes.forEach(msg => console.log(`   - ${msg}`));
+            }
+        })
+        .catch(error => {
+            console.error('❌ Error al cerrar jornadas automáticamente:', error);
+        });
+}
+
 // Iniciar servidor
 app.listen(PORT, () => {
     console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
@@ -169,11 +194,17 @@ app.listen(PORT, () => {
     // Ejecutar limpieza al iniciar
     setTimeout(() => {
         limpiarRegistrosAntiguos();
+        cerrarJornadasPendientes(); // Cerrar jornadas pendientes al iniciar
     }, 5000); // Esperar 5 segundos para que la BD esté lista
     
     // Ejecutar limpieza diariamente (cada 24 horas)
     setInterval(() => {
         limpiarRegistrosAntiguos();
     }, 24 * 60 * 60 * 1000); // 24 horas en milisegundos
+    
+    // Cerrar jornadas automáticamente cada hora
+    setInterval(() => {
+        cerrarJornadasPendientes();
+    }, 60 * 60 * 1000); // 1 hora en milisegundos
 });
 
