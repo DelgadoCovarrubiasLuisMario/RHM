@@ -3,6 +3,8 @@ let html5QrcodeScanner = null;
 let movimientoSeleccionado = null;
 let turnoSeleccionado = null;
 let todosLosEmpleados = [];
+let stream = null;
+let videoElement = null;
 
 // Inicializar página
 document.addEventListener('DOMContentLoaded', function() {
@@ -265,6 +267,103 @@ function cerrarEscanner() {
     }
 }
 
+// Capturar foto automáticamente (solo para ENTRADA)
+async function capturarFoto() {
+    return new Promise((resolve, reject) => {
+        // Solo capturar foto si es ENTRADA o INGRESO
+        const movimiento = document.getElementById('movimiento').value;
+        if (movimiento !== 'ENTRADA' && movimiento !== 'INGRESO') {
+            resolve(null);
+            return;
+        }
+
+        // Verificar si el navegador soporta getUserMedia
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            console.warn('getUserMedia no está disponible');
+            resolve(null);
+            return;
+        }
+
+        // Crear elemento de video temporal
+        videoElement = document.createElement('video');
+        videoElement.style.position = 'fixed';
+        videoElement.style.top = '-9999px';
+        videoElement.style.width = '320px';
+        videoElement.style.height = '240px';
+        videoElement.autoplay = true;
+        videoElement.playsInline = true;
+        videoElement.muted = true;
+        document.body.appendChild(videoElement);
+
+        // Obtener acceso a la cámara frontal
+        navigator.mediaDevices.getUserMedia({ 
+            video: { 
+                facingMode: 'user', // Cámara frontal
+                width: { ideal: 640 },
+                height: { ideal: 480 }
+            } 
+        })
+        .then(mediaStream => {
+            stream = mediaStream;
+            videoElement.srcObject = stream;
+            
+            // Esperar a que el video esté listo
+            videoElement.onloadedmetadata = () => {
+                videoElement.play().then(() => {
+                    // Esperar un momento para que la cámara se estabilice
+                    setTimeout(() => {
+                        try {
+                            // Crear canvas para capturar la foto
+                            const canvas = document.createElement('canvas');
+                            canvas.width = videoElement.videoWidth;
+                            canvas.height = videoElement.videoHeight;
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(videoElement, 0, 0);
+                            
+                            // Convertir a base64
+                            const fotoBase64 = canvas.toDataURL('image/jpeg', 0.8);
+                            
+                            // Limpiar
+                            detenerCamara();
+                            
+                            resolve(fotoBase64);
+                        } catch (error) {
+                            console.error('Error al capturar foto:', error);
+                            detenerCamara();
+                            resolve(null);
+                        }
+                    }, 800); // Esperar 800ms para estabilizar
+                }).catch(err => {
+                    console.error('Error al reproducir video:', err);
+                    detenerCamara();
+                    resolve(null);
+                });
+            };
+        })
+        .catch(err => {
+            console.error('Error al acceder a la cámara:', err);
+            detenerCamara();
+            // Si falla la cámara, continuar sin foto
+            resolve(null);
+        });
+    });
+}
+
+// Detener cámara
+function detenerCamara() {
+    if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+    }
+    if (videoElement) {
+        videoElement.srcObject = null;
+        if (videoElement.parentNode) {
+            videoElement.parentNode.removeChild(videoElement);
+        }
+        videoElement = null;
+    }
+}
+
 // Manejar envío del formulario
 document.getElementById('registroForm').addEventListener('submit', async function(e) {
     e.preventDefault();
@@ -289,6 +388,17 @@ document.getElementById('registroForm').addEventListener('submit', async functio
     // Deshabilitar botón mientras se procesa
     const submitBtn = this.querySelector('button[type="submit"]');
     submitBtn.disabled = true;
+    submitBtn.textContent = 'Capturando foto...';
+
+    // Capturar foto automáticamente (solo para ENTRADA)
+    let fotoBase64 = null;
+    try {
+        fotoBase64 = await capturarFoto();
+    } catch (error) {
+        console.error('Error al capturar foto:', error);
+        // Continuar sin foto si hay error
+    }
+
     submitBtn.textContent = 'Guardando...';
 
     try {
@@ -301,7 +411,8 @@ document.getElementById('registroForm').addEventListener('submit', async functio
             body: JSON.stringify({
                 codigo,
                 movimiento,
-                turno: parseInt(turno)
+                turno: parseInt(turno),
+                foto: fotoBase64
             })
         });
 
