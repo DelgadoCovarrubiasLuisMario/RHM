@@ -453,6 +453,7 @@ window.onclick = function(event) {
     const modalDescuento = document.getElementById('modalDescuento');
     const modalVerDescuentos = document.getElementById('modalVerDescuentos');
     const modalEmpleado = document.getElementById('modalEmpleado');
+    const modalFotoEmpleado = document.getElementById('modalFotoEmpleado');
     
     if (event.target === modalDescuento) {
         cerrarModalDescuento();
@@ -462,6 +463,9 @@ window.onclick = function(event) {
     }
     if (event.target === modalEmpleado) {
         cerrarModalEmpleado();
+    }
+    if (event.target === modalFotoEmpleado) {
+        cerrarModalFotoEmpleado();
     }
 }
 
