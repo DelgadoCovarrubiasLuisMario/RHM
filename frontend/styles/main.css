@@ -1995,6 +1995,45 @@ textarea {
     background: var(--card-bg);
 }
 
+/* Estilos para fotos de asistencia */
+.asistencia-foto-container {
+    margin: 1rem 0;
+    text-align: center;
+    padding: 0.5rem;
+    background: var(--bg-color);
+    border-radius: 8px;
+}
+
+.asistencia-foto {
+    max-width: 200px;
+    max-height: 200px;
+    width: auto;
+    height: auto;
+    border-radius: 8px;
+    border: 2px solid var(--border-color);
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    object-fit: contain;
+}
+
+.asistencia-foto:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.modal-foto {
+    animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
 /* Notificación de cortes automáticos */
 .notificacion-cortes {
     position: fixed;

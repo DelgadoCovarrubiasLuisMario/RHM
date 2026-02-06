@@ -238,7 +238,7 @@ function cerrarJornadasAutomaticamente(db, empleadoId = null) {
 
 // Registrar asistencia (empleado escanea QR)
 router.post('/registrar', async (req, res) => {
-    const { codigo, movimiento, turno } = req.body;
+    const { codigo, movimiento, turno, foto } = req.body;
     const db = getDB();
 
     // Validar datos requeridos
@@ -338,9 +338,9 @@ router.post('/registrar', async (req, res) => {
             function registrarAsistencia(tiempoTrabajado) {
                 // Insertar registro de asistencia
                 db.run(
-                    `INSERT INTO asistencia (empleado_id, fecha, hora, movimiento, turno, area) 
-                     VALUES (?, ?, ?, ?, ?, ?)`,
-                    [empleado.id, fecha, hora, movimiento, turno, null],
+                    `INSERT INTO asistencia (empleado_id, fecha, hora, movimiento, turno, area, foto) 
+                     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                    [empleado.id, fecha, hora, movimiento, turno, null, foto || null],
                     function(err) {
                         if (err) {
                             return res.status(500).json({ 

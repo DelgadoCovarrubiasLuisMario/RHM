@@ -85,6 +85,7 @@ function createTables() {
             movimiento TEXT NOT NULL CHECK(movimiento IN ('ENTRADA', 'SALIDA', 'INGRESO')),
             turno INTEGER NOT NULL CHECK(turno IN (1, 2, 3)),
             area TEXT NOT NULL CHECK(area IN ('Planta', 'GeoCycle')),
+            foto TEXT,
             creado_en DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (empleado_id) REFERENCES empleados(id)
         )
@@ -109,13 +110,14 @@ function createTables() {
                                 movimiento TEXT NOT NULL CHECK(movimiento IN ('ENTRADA', 'SALIDA', 'INGRESO')),
                                 turno INTEGER NOT NULL CHECK(turno IN (1, 2, 3)),
                                 area TEXT,
+                                foto TEXT,
                                 creado_en DATETIME DEFAULT CURRENT_TIMESTAMP,
                                 FOREIGN KEY (empleado_id) REFERENCES empleados(id)
                             )
                         `, (err) => {
                             if (!err) {
                                 // Copiar datos
-                                db.run(`INSERT INTO asistencia_new SELECT id, empleado_id, fecha, hora, movimiento, turno, area, creado_en FROM asistencia`, (err) => {
+                                db.run(`INSERT INTO asistencia_new SELECT id, empleado_id, fecha, hora, movimiento, turno, area, NULL as foto, creado_en FROM asistencia`, (err) => {
                                     if (!err) {
                                         // Eliminar tabla vieja
                                         db.run(`DROP TABLE asistencia`, (err) => {
@@ -148,6 +150,10 @@ function createTables() {
                             }
                         });
                     } else {
+                        // Agregar columna foto si no existe (para bases de datos existentes)
+                        db.run(`ALTER TABLE asistencia ADD COLUMN foto TEXT`, (err) => {
+                            // Ignorar error si la columna ya existe
+                        });
                         // Si no necesita migración, solo crear índices
                         db.run(`CREATE INDEX IF NOT EXISTS idx_asistencia_fecha_area ON asistencia(fecha, area)`, (err) => {
                             if (err) {

@@ -85,6 +85,11 @@ function mostrarAsistencia(registros, area) {
                     </div>
                     <span class="movimiento-badge ${movimientoClass}">${registro.movimiento}</span>
                 </div>
+                ${registro.foto ? `
+                <div class="asistencia-foto-container">
+                    <img src="${registro.foto}" alt="Foto de ${nombreCompleto}" class="asistencia-foto" onclick="ampliarFoto('${registro.foto}', '${nombreCompleto}')">
+                </div>
+                ` : ''}
                 <div class="asistencia-details">
                     <div class="detail-item">
                         <span class="detail-label">Fecha:</span>
@@ -121,6 +126,42 @@ function limpiarFiltros() {
     document.getElementById('filtroFechaFin').value = hoy;
     document.getElementById('filtroMovimiento').value = '';
     cargarAsistencia();
+}
+
+// Ampliar foto al hacer clic
+function ampliarFoto(fotoSrc, nombreEmpleado) {
+    const modal = document.createElement('div');
+    modal.className = 'modal-foto';
+    modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.9);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+        cursor: pointer;
+    `;
+    
+    const img = document.createElement('img');
+    img.src = fotoSrc;
+    img.alt = `Foto de ${nombreEmpleado}`;
+    img.style.cssText = `
+        max-width: 90%;
+        max-height: 90%;
+        border-radius: 8px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    `;
+    
+    modal.appendChild(img);
+    document.body.appendChild(modal);
+    
+    modal.onclick = () => {
+        document.body.removeChild(modal);
+    };
 }
 
 // Volver al menú principal
