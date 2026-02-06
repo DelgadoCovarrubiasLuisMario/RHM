@@ -1995,3 +1995,125 @@ textarea {
     background: var(--card-bg);
 }
 
+/* Notificación de cortes automáticos */
+.notificacion-cortes {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    max-width: 500px;
+    background: var(--card-bg);
+    border: 2px solid var(--warning-color);
+    border-radius: 12px;
+    box-shadow: var(--shadow-lg);
+    z-index: 10000;
+    animation: slideInRight 0.3s ease-out;
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.notificacion-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 1rem;
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    border-bottom: 2px solid var(--warning-color);
+    border-radius: 10px 10px 0 0;
+}
+
+.notificacion-header h3 {
+    margin: 0;
+    flex: 1;
+    color: var(--text-primary);
+    font-size: 1.1rem;
+}
+
+.notificacion-icon {
+    font-size: 1.5rem;
+}
+
+.notificacion-cerrar {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: var(--text-primary);
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background 0.2s;
+}
+
+.notificacion-cerrar:hover {
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.notificacion-body {
+    padding: 1rem;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.cortes-lista {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.corte-item {
+    padding: 0.75rem;
+    background: var(--bg-color);
+    border-radius: 8px;
+    border-left: 4px solid var(--warning-color);
+}
+
+.corte-empleado {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin-bottom: 0.5rem;
+}
+
+.corte-empleado strong {
+    color: var(--text-primary);
+    font-size: 1rem;
+}
+
+.corte-codigo {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.corte-detalle {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: 0.9rem;
+}
+
+.corte-fecha {
+    color: var(--text-secondary);
+}
+
+.corte-horas {
+    color: var(--primary-color);
+    font-weight: 600;
+}
+
+[data-theme="dark"] .notificacion-header {
+    background: linear-gradient(135deg, #78350f 0%, #92400e 100%);
+}
+
