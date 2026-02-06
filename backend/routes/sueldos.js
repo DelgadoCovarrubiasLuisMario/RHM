@@ -436,9 +436,7 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
                     }
                 } else {
                     // Domingo: TODAS las horas se cuentan como horas extras (dobles/triples según acumulación semanal)
-                    horasExtrasSemanales += horasTrabajadas;
-                } else {
-                    // Domingo: TODAS las horas se cuentan como horas extras (dobles/triples según acumulación semanal)
+                    diasTrabajados++;
                     horasExtrasSemanales += horasTrabajadas;
                     horasExtrasPorDia.push({
                         fecha,
