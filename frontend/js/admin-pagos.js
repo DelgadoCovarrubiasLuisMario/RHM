@@ -251,6 +251,66 @@ window.onclick = function(event) {
     }
 }
 
+// Generar nómina (descargar Excel)
+async function generarNomina() {
+    const fechaInicio = document.getElementById('filtroFechaInicio').value;
+    const fechaFin = document.getElementById('filtroFechaFin').value;
+
+    if (!fechaInicio || !fechaFin) {
+        alert('⚠️ Por favor selecciona un rango de fechas (Desde y Hasta)');
+        return;
+    }
+
+    const btnGenerar = document.getElementById('btnGenerarNomina');
+    const textoOriginal = btnGenerar.textContent;
+    btnGenerar.disabled = true;
+    btnGenerar.textContent = '⏳ Generando...';
+
+    try {
+        const apiURL = window.API_CONFIG ? window.API_CONFIG.getBaseURL() : 'http://localhost:3000';
+        const url = `${apiURL}/api/pagos/generar-nomina?fecha_desde=${encodeURIComponent(fechaInicio)}&fecha_hasta=${encodeURIComponent(fechaFin)}`;
+        
+        const response = await fetch(url);
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Error al generar nómina');
+        }
+
+        // Obtener el blob del archivo
+        const blob = await response.blob();
+        
+        // Crear URL temporal y descargar
+        const urlDescarga = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = urlDescarga;
+        
+        // Obtener nombre del archivo del header Content-Disposition
+        const contentDisposition = response.headers.get('Content-Disposition');
+        let nombreArchivo = 'nomina.xlsx';
+        if (contentDisposition) {
+            const matches = contentDisposition.match(/filename="(.+)"/);
+            if (matches && matches[1]) {
+                nombreArchivo = matches[1];
+            }
+        }
+        
+        link.download = nombreArchivo;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(urlDescarga);
+
+        alert(`✅ Nómina generada exitosamente: ${nombreArchivo}`);
+    } catch (error) {
+        console.error('Error al generar nómina:', error);
+        alert(`❌ Error al generar nómina: ${error.message}`);
+    } finally {
+        btnGenerar.disabled = false;
+        btnGenerar.textContent = textoOriginal;
+    }
+}
+
 // Limpiar filtros
 function limpiarFiltros() {
     document.getElementById('filtroFechaInicio').value = '';
