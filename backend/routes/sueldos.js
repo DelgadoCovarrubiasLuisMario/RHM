@@ -877,35 +877,34 @@ router.get('/listar', (req, res) => {
                                                 );
                                         
                                                 sueldos.push({
-                                            empleado_id: empleado.id,
-                                            empleado: `${empleado.nombre} ${empleado.apellido}`,
-                                            sueldo_base: sueldoBase,
-                                            pago_por_hora: pagoPorHora,
-                                            periodo: {
-                                                fecha_inicio: fechaInicio,
-                                                fecha_fin: fechaFin
-                                            },
-                                            ...calculo
-                                        });
+                                                    empleado_id: empleado.id,
+                                                    empleado: `${empleado.nombre} ${empleado.apellido}`,
+                                                    sueldo_base: sueldoBase,
+                                                    pago_por_hora: pagoPorHora,
+                                                    periodo: {
+                                                        fecha_inicio: fechaInicio,
+                                                        fecha_fin: fechaFin
+                                                    },
+                                                    ...calculo
+                                                });
                                         
-                                                    procesados++;
-                                                    if (procesados === empleados.length) {
-                                                        res.json({
-                                                            success: true,
-                                                            periodo: {
-                                                                fecha_inicio: fechaInicio,
-                                                                fecha_fin: fechaFin
-                                                            },
-                                                            data: sueldos,
-                                                            total: sueldos.length
-                                                        });
-                                                    }
+                                                procesados++;
+                                                if (procesados === empleados.length) {
+                                                    res.json({
+                                                        success: true,
+                                                        periodo: {
+                                                            fecha_inicio: fechaInicio,
+                                                            fecha_fin: fechaFin
+                                                        },
+                                                        data: sueldos,
+                                                        total: sueldos.length
+                                                    });
                                                 }
-                                            );
-                                        }
-                                    );
-                                }
-                            );
+                                            }
+                                        );
+                                    }
+                                );
+                            }
                         );
                     }
                 );
