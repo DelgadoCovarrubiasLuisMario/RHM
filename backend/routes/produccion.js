@@ -290,128 +290,7 @@ router.post('/calcular-bonos', (req, res) => {
     });
 });
 
-// Eliminar registro de producción
-router.delete('/:id', (req, res) => {
-    const { id } = req.params;
-    const db = getDB();
-
-    db.run('DELETE FROM produccion_trituracion WHERE id = ?', [id], function(err) {
-        if (err) {
-            return res.status(500).json({ success: false, message: 'Error al eliminar registro: ' + err.message });
-        }
-        if (this.changes === 0) {
-            return res.status(404).json({ success: false, message: 'Registro no encontrado' });
-        }
-        res.json({ success: true, message: 'Registro eliminado correctamente' });
-    });
-});
-
-// Obtener un registro por ID (DEBE estar antes de /:id DELETE)
-router.get('/:id', (req, res) => {
-    const { id } = req.params;
-    const db = getDB();
-
-    db.get(
-        `SELECT 
-            p.id,
-            p.fecha,
-            p.turno,
-            p.toneladas,
-            p.nombre_encargado,
-            p.puntos_rango_25_30,
-            p.puntos_rango_30_35,
-            p.puntos_rango_35_40,
-            p.puntos_rango_40_plus,
-            p.comentarios,
-            COALESCE(e.nombre, '') as nombre,
-            COALESCE(e.apellido, '') as apellido
-         FROM produccion_trituracion p
-         LEFT JOIN empleados e ON p.empleado_id = e.id
-         WHERE p.id = ?`,
-        [id],
-        (err, registro) => {
-            if (err) {
-                return res.status(500).json({ success: false, message: 'Error al obtener registro: ' + err.message });
-            }
-            if (!registro) {
-                return res.status(404).json({ success: false, message: 'Registro no encontrado' });
-            }
-            res.json({ success: true, data: registro });
-        }
-    );
-});
-
-// Actualizar un registro (DEBE estar antes de DELETE /:id)
-router.put('/:id', (req, res) => {
-    const { id } = req.params;
-    const { nombre_encargado, fecha, turno, toneladas, comentarios } = req.body;
-    const db = getDB();
-
-    if (!fecha || !turno || toneladas === undefined) {
-        return res.status(400).json({ success: false, message: 'Faltan datos requeridos' });
-    }
-
-    if (![1, 2, 3].includes(parseInt(turno))) {
-        return res.status(400).json({ success: false, message: 'Turno inválido (debe ser 1, 2 o 3)' });
-    }
-
-    const toneladasNum = parseFloat(toneladas);
-    if (isNaN(toneladasNum) || toneladasNum < 0) {
-        return res.status(400).json({ success: false, message: 'Toneladas inválidas' });
-    }
-
-    // Validar nombre_encargado si se proporciona
-    if (nombre_encargado && !['Iker', 'Rodrigo', 'Eliodoro', 'Williams'].includes(nombre_encargado)) {
-        return res.status(400).json({ success: false, message: 'Nombre de encargado inválido' });
-    }
-
-    // Calcular puntos
-    const puntos = calcularPuntos(toneladasNum);
-
-    db.run(
-        `UPDATE produccion_trituracion 
-         SET nombre_encargado = ?, fecha = ?, turno = ?, toneladas = ?, 
-             puntos_rango_25_30 = ?, puntos_rango_30_35 = ?, puntos_rango_35_40 = ?, puntos_rango_40_plus = ?, comentarios = ?
-         WHERE id = ?`,
-        [nombre_encargado || null, fecha, turno, toneladasNum, 
-         puntos.rango_25_30, puntos.rango_30_35, puntos.rango_35_40, puntos.rango_40_plus, comentarios || null, id],
-        function(err) {
-            if (err) {
-                console.error('Error al actualizar producción:', err);
-                return res.status(500).json({ success: false, message: 'Error al actualizar registro: ' + err.message });
-            }
-            if (this.changes === 0) {
-                return res.status(404).json({ success: false, message: 'Registro no encontrado' });
-            }
-            res.json({
-                success: true,
-                message: 'Registro actualizado correctamente',
-                data: {
-                    id: parseInt(id),
-                    puntos: puntos
-                }
-            });
-        }
-    );
-});
-
-// Limpiar registros (eliminar todos los registros)
-router.delete('/limpiar/registros', (req, res) => {
-    const db = getDB();
-
-    db.run('DELETE FROM produccion_trituracion', [], function(err) {
-        if (err) {
-            return res.status(500).json({ success: false, message: 'Error al limpiar registros: ' + err.message });
-        }
-        res.json({ 
-            success: true, 
-            message: `${this.changes} registro(s) eliminado(s) correctamente`,
-            registros_eliminados: this.changes
-        });
-    });
-});
-
-// Generar tickets de bonos (Excel) - Similar a nómina de pagos
+// Generar tickets de bonos (Excel) - DEBE estar ANTES de /:id
 router.get('/generar-tickets', (req, res) => {
     const { fecha_inicio, fecha_fin } = req.query;
     const db = getDB();
@@ -581,6 +460,127 @@ router.get('/generar-tickets', (req, res) => {
                 message: 'Error al generar archivo de tickets: ' + error.message
             });
         }
+    });
+});
+
+// Eliminar registro de producción
+router.delete('/:id', (req, res) => {
+    const { id } = req.params;
+    const db = getDB();
+
+    db.run('DELETE FROM produccion_trituracion WHERE id = ?', [id], function(err) {
+        if (err) {
+            return res.status(500).json({ success: false, message: 'Error al eliminar registro: ' + err.message });
+        }
+        if (this.changes === 0) {
+            return res.status(404).json({ success: false, message: 'Registro no encontrado' });
+        }
+        res.json({ success: true, message: 'Registro eliminado correctamente' });
+    });
+});
+
+// Obtener un registro por ID (DEBE estar antes de /:id DELETE)
+router.get('/:id', (req, res) => {
+    const { id } = req.params;
+    const db = getDB();
+
+    db.get(
+        `SELECT 
+            p.id,
+            p.fecha,
+            p.turno,
+            p.toneladas,
+            p.nombre_encargado,
+            p.puntos_rango_25_30,
+            p.puntos_rango_30_35,
+            p.puntos_rango_35_40,
+            p.puntos_rango_40_plus,
+            p.comentarios,
+            COALESCE(e.nombre, '') as nombre,
+            COALESCE(e.apellido, '') as apellido
+         FROM produccion_trituracion p
+         LEFT JOIN empleados e ON p.empleado_id = e.id
+         WHERE p.id = ?`,
+        [id],
+        (err, registro) => {
+            if (err) {
+                return res.status(500).json({ success: false, message: 'Error al obtener registro: ' + err.message });
+            }
+            if (!registro) {
+                return res.status(404).json({ success: false, message: 'Registro no encontrado' });
+            }
+            res.json({ success: true, data: registro });
+        }
+    );
+});
+
+// Actualizar un registro (DEBE estar antes de DELETE /:id)
+router.put('/:id', (req, res) => {
+    const { id } = req.params;
+    const { nombre_encargado, fecha, turno, toneladas, comentarios } = req.body;
+    const db = getDB();
+
+    if (!fecha || !turno || toneladas === undefined) {
+        return res.status(400).json({ success: false, message: 'Faltan datos requeridos' });
+    }
+
+    if (![1, 2, 3].includes(parseInt(turno))) {
+        return res.status(400).json({ success: false, message: 'Turno inválido (debe ser 1, 2 o 3)' });
+    }
+
+    const toneladasNum = parseFloat(toneladas);
+    if (isNaN(toneladasNum) || toneladasNum < 0) {
+        return res.status(400).json({ success: false, message: 'Toneladas inválidas' });
+    }
+
+    // Validar nombre_encargado si se proporciona
+    if (nombre_encargado && !['Iker', 'Rodrigo', 'Eliodoro', 'Williams'].includes(nombre_encargado)) {
+        return res.status(400).json({ success: false, message: 'Nombre de encargado inválido' });
+    }
+
+    // Calcular puntos
+    const puntos = calcularPuntos(toneladasNum);
+
+    db.run(
+        `UPDATE produccion_trituracion 
+         SET nombre_encargado = ?, fecha = ?, turno = ?, toneladas = ?, 
+             puntos_rango_25_30 = ?, puntos_rango_30_35 = ?, puntos_rango_35_40 = ?, puntos_rango_40_plus = ?, comentarios = ?
+         WHERE id = ?`,
+        [nombre_encargado || null, fecha, turno, toneladasNum, 
+         puntos.rango_25_30, puntos.rango_30_35, puntos.rango_35_40, puntos.rango_40_plus, comentarios || null, id],
+        function(err) {
+            if (err) {
+                console.error('Error al actualizar producción:', err);
+                return res.status(500).json({ success: false, message: 'Error al actualizar registro: ' + err.message });
+            }
+            if (this.changes === 0) {
+                return res.status(404).json({ success: false, message: 'Registro no encontrado' });
+            }
+            res.json({
+                success: true,
+                message: 'Registro actualizado correctamente',
+                data: {
+                    id: parseInt(id),
+                    puntos: puntos
+                }
+            });
+        }
+    );
+});
+
+// Limpiar registros (eliminar todos los registros)
+router.delete('/limpiar/registros', (req, res) => {
+    const db = getDB();
+
+    db.run('DELETE FROM produccion_trituracion', [], function(err) {
+        if (err) {
+            return res.status(500).json({ success: false, message: 'Error al limpiar registros: ' + err.message });
+        }
+        res.json({ 
+            success: true, 
+            message: `${this.changes} registro(s) eliminado(s) correctamente`,
+            registros_eliminados: this.changes
+        });
     });
 });
 
