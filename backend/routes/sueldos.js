@@ -405,16 +405,29 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
                 entrada.fecha, entrada.hora, 
                 salida.fecha, salida.hora
             );
-            const horasTrabajadas = resultadoHoras.horas;
+            let horasTrabajadas = resultadoHoras.horas;
             
-            // Si hubo corte automático, registrar el corte
+            // Si hubo corte automático, verificar si fue rechazado
             if (resultadoHoras.huboCorte) {
-                registrarCorteAutomatico(
-                    empleadoId,
-                    fecha,
-                    resultadoHoras.horasOriginales,
-                    9.5, // horas cortadas
-                    1.5  // horas extra (9.5 - 8 = 1.5)
+                // Verificar si ya existe un corte rechazado para este día
+                db.get(
+                    'SELECT estado FROM cortes_automaticos WHERE empleado_id = ? AND fecha = ?',
+                    [empleadoId, fecha],
+                    (err, corteExistente) => {
+                        if (!err && corteExistente && corteExistente.estado === 'rechazado') {
+                            // Si fue rechazado, ajustar a 8 horas exactas
+                            horasTrabajadas = 8;
+                        } else if (!err && !corteExistente) {
+                            // Si no existe corte, registrar uno nuevo
+                            registrarCorteAutomatico(
+                                empleadoId,
+                                fecha,
+                                resultadoHoras.horasOriginales,
+                                9.5, // horas cortadas
+                                1.5  // horas extra (9.5 - 8 = 1.5)
+                            );
+                        }
+                    }
                 );
             }
             
@@ -424,24 +437,10 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
                     // Contar como día trabajado (para calcular faltas)
                     diasTrabajados++;
                     
-                    // Verificar si hay un corte automático rechazado para este día
-                    // Si fue rechazado, solo contar 8 horas (sin horas extra)
+                    // Días normales: primeras 8 horas son normales, el resto extras
+                    // Si hubo corte rechazado, horasTrabajadas ya será 8
                     let horasNormalesDia = Math.min(horasTrabajadas, 8);
                     let horasExtrasDia = Math.max(0, horasTrabajadas - 8);
-                    
-                    // Si hubo corte y fue rechazado, ajustar a 8 horas exactas
-                    if (resultadoHoras.huboCorte) {
-                        db.get(
-                            'SELECT estado FROM cortes_automaticos WHERE empleado_id = ? AND fecha = ?',
-                            [empleadoId, fecha],
-                            (err, corte) => {
-                                if (!err && corte && corte.estado === 'rechazado') {
-                                    horasNormalesDia = 8;
-                                    horasExtrasDia = 0;
-                                }
-                            }
-                        );
-                    }
                     
                     horasNormalesTotales += horasNormalesDia;
                     
