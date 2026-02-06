@@ -959,34 +959,34 @@ router.post('/pagar/:empleado_id', (req, res) => {
                                                  VALUES (?, ?, ?, ?, ?, ?, ?)`,
                                                 [empleado_id, fecha_inicio, fecha_fin, null, sueldoBase, calculo.total, desgloseJSON],
                                                 function(err) {
-                                    if (err) {
-                                        return res.status(500).json({ 
-                                            success: false, 
-                                            message: 'Error al guardar pago: ' + err.message 
-                                        });
-                                    }
+                                                    if (err) {
+                                                        return res.status(500).json({ 
+                                                            success: false, 
+                                                            message: 'Error al guardar pago: ' + err.message 
+                                                        });
+                                                    }
 
-                                    // Generar todas las fechas en el rango para eliminar
-                                    const fechasEnRangoEliminar = generarFechasEnRango(fecha_inicio, fecha_fin);
-                                    
-                                    // Eliminar registros de asistencia del período
-                                    db.run(
-                                        `DELETE FROM asistencia 
-                                         WHERE empleado_id = ? 
-                                         AND fecha IN (${fechasEnRangoEliminar.map(() => '?').join(',')})`,
-                                        [empleado_id, ...fechasEnRangoEliminar],
-                                        (err) => {
-                                            if (err) {
-                                                console.error('Error al eliminar asistencia:', err);
-                                                // Continuar aunque haya error
-                                            }
+                                                    // Generar todas las fechas en el rango para eliminar
+                                                    const fechasEnRangoEliminar = generarFechasEnRango(fecha_inicio, fecha_fin);
+                                                    
+                                                    // Eliminar registros de asistencia del período
+                                                    db.run(
+                                                        `DELETE FROM asistencia 
+                                                         WHERE empleado_id = ? 
+                                                         AND fecha IN (${fechasEnRangoEliminar.map(() => '?').join(',')})`,
+                                                        [empleado_id, ...fechasEnRangoEliminar],
+                                                        (err) => {
+                                                            if (err) {
+                                                                console.error('Error al eliminar asistencia:', err);
+                                                                // Continuar aunque haya error
+                                                            }
 
-                                            // Eliminar descuentos varios del período
-                                            db.run(
-                                                `DELETE FROM descuentos_varios 
-                                                 WHERE empleado_id = ? 
-                                                 AND fecha_inicio = ? 
-                                                 AND fecha_fin = ?`,
+                                                            // Eliminar descuentos varios del período
+                                                            db.run(
+                                                                `DELETE FROM descuentos_varios 
+                                                                 WHERE empleado_id = ? 
+                                                                 AND fecha_inicio = ? 
+                                                                 AND fecha_fin = ?`,
                                                 [empleado_id, fecha_inicio, fecha_fin],
                                                 (err) => {
                                                     if (err) {
