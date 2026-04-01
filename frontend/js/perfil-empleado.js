@@ -1,5 +1,4 @@
 // Variables globales
-let html5QrcodeScanner = null;
 let movimientoSeleccionado = null;
 let turnoSeleccionado = null;
 let todosLosEmpleados = [];
@@ -14,7 +13,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Cerrar lista al hacer clic fuera
     document.addEventListener('click', function(e) {
-        if (!e.target.closest('#codigo') && !e.target.closest('#listaEmpleados') && !e.target.closest('#btnEscanearQR')) {
+        if (!e.target.closest('#codigo') && !e.target.closest('#listaEmpleados')) {
             const listaEmpleados = document.getElementById('listaEmpleados');
             if (listaEmpleados) {
                 listaEmpleados.style.display = 'none';
@@ -160,76 +159,6 @@ function mostrarListaEmpleadosFiltrada(empleados) {
 function seleccionarEmpleado(codigo, nombre) {
     document.getElementById('codigo').value = codigo;
     document.getElementById('listaEmpleados').style.display = 'none';
-    cerrarEscanner();
-}
-
-async function cerrarEscanner() {
-    const qrReaderContainer = document.getElementById('qr-reader');
-    if (!qrReaderContainer) return;
-
-    if (html5QrcodeScanner) {
-        const scanner = html5QrcodeScanner;
-        html5QrcodeScanner = null;
-        try {
-            await scanner.stop();
-        } catch (_) {
-            // Puede fallar si ya no estaba corriendo; se ignora.
-        }
-        try {
-            scanner.clear();
-        } catch (_) {
-            // Ignorar errores de clear en estados intermedios.
-        }
-    }
-    qrReaderContainer.style.display = 'none';
-}
-
-// Escáner QR robusto con fallback de cámara
-function activarEscanner() {
-    const qrReaderContainer = document.getElementById('qr-reader');
-    const codigoInput = document.getElementById('codigo');
-
-    if (html5QrcodeScanner) {
-        cerrarEscanner();
-        return;
-    }
-
-    qrReaderContainer.style.display = 'block';
-    html5QrcodeScanner = new Html5Qrcode('qr-reader');
-
-    const size = Math.max(180, Math.min(320, Math.floor((window.innerWidth || 360) * 0.7)));
-    const config = { fps: 10, qrbox: { width: size, height: size }, aspectRatio: 1.0 };
-
-    const onSuccess = (decodedText) => {
-        if (!codigoInput) {
-            cerrarEscanner();
-            return;
-        }
-        codigoInput.value = decodedText;
-        const lista = document.getElementById('listaEmpleados');
-        if (lista) lista.style.display = 'none';
-        cerrarEscanner();
-    };
-
-    const onError = () => {
-        // Ignorar errores de lectura continuos.
-    };
-
-    html5QrcodeScanner.start({ facingMode: { ideal: 'environment' } }, config, onSuccess, onError)
-        .catch(() => html5QrcodeScanner.start({ facingMode: 'user' }, config, onSuccess, onError))
-        .catch(async (err) => {
-            try {
-                const devices = await Html5Qrcode.getCameras();
-                if (devices && devices.length > 0) {
-                    return html5QrcodeScanner.start({ deviceId: { exact: devices[0].id } }, config, onSuccess, onError);
-                }
-                throw err;
-            } catch (finalErr) {
-                const detalle = finalErr && finalErr.name ? ` (${finalErr.name})` : '';
-                alert(`Error al iniciar la cámara${detalle}. Verifica permisos, HTTPS y que no esté en uso por otra app.`);
-                cerrarEscanner();
-            }
-        });
 }
 
 // Seleccionar movimiento
@@ -321,7 +250,6 @@ function limpiarFormulario() {
     document.getElementById('registroForm').reset();
     movimientoSeleccionado = null;
     turnoSeleccionado = null;
-    cerrarEscanner();
     document.querySelectorAll('.movimiento-btn, .turno-btn').forEach(btn => {
         btn.classList.remove('active');
     });

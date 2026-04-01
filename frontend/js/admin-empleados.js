@@ -88,14 +88,11 @@ function mostrarEmpleados(empleados, area) {
                         <div class="empleado-foto-wrapper" onclick="abrirModalFoto(${empleado.id}, '${empleado.nombre.replace(/'/g, "\\'")} ${empleado.apellido.replace(/'/g, "\\'")}')" title="Clic para cambiar foto">
                             ${empleado.foto ? `<img src="${empleado.foto}" alt="${empleado.nombre}" class="empleado-foto" onerror="this.style.display='none'">` : '<div class="empleado-foto-placeholder">📷<br><small>Clic para agregar</small></div>'}
                         </div>
-                        <div class="empleado-qr-container" id="qr-container-${empleado.id}">
-                            <div class="qr-loading">Cargando QR...</div>
-                        </div>
                     </div>
                     <div class="empleado-datos">
                         <div class="empleado-nombre">${empleado.nombre} ${empleado.apellido}</div>
                         <div class="empleado-id">ID: ${empleado.id}</div>
-                        <div class="empleado-qr-text">Código QR: <span class="qr-text-value" id="qr-text-${empleado.id}">${empleado.codigo}</span></div>
+                        <div class="empleado-qr-text">Código: <span class="qr-text-value">${empleado.codigo || 'Sin código'}</span></div>
                         <div class="empleado-vacaciones-disponibles" id="vacaciones-disponibles-${empleado.id}">
                             <span class="loading-text">Cargando días disponibles...</span>
                         </div>
@@ -129,9 +126,8 @@ function mostrarEmpleados(empleados, area) {
 
     listaDiv.innerHTML = html;
 
-    // Cargar códigos QR, días disponibles de vacaciones y últimas entregas para cada empleado
+    // Cargar días disponibles de vacaciones y últimas entregas para cada empleado
     empleados.forEach(empleado => {
-        cargarQR(empleado.id);
         cargarDiasVacacionesDisponibles(empleado.id);
         cargarUltimasEntregas(empleado.id);
     });
@@ -163,34 +159,6 @@ async function cargarDiasVacacionesDisponibles(empleadoId) {
         const container = document.getElementById(`vacaciones-disponibles-${empleadoId}`);
         if (container) {
             container.innerHTML = `<span class="error-text">Error de conexión</span>`;
-        }
-    }
-}
-
-// Cargar código QR de un empleado
-async function cargarQR(empleadoId) {
-    try {
-        const apiURL = window.API_CONFIG ? window.API_CONFIG.getBaseURL() : 'http://localhost:3000';
-        const response = await fetch(`${apiURL}/api/empleados/${empleadoId}/qr`);
-        const data = await response.json();
-
-        if (data.success) {
-            const qrContainer = document.getElementById(`qr-container-${empleadoId}`);
-            const qrTextElement = document.getElementById(`qr-text-${empleadoId}`);
-            
-            if (qrContainer) {
-                qrContainer.innerHTML = `<img src="${data.qr_image}" alt="QR Code" class="empleado-qr-image">`;
-            }
-            
-            if (qrTextElement) {
-                qrTextElement.textContent = data.qr_text;
-            }
-        }
-    } catch (error) {
-        console.error('Error al cargar QR:', error);
-        const qrContainer = document.getElementById(`qr-container-${empleadoId}`);
-        if (qrContainer) {
-            qrContainer.innerHTML = '<div class="qr-error">Error al cargar QR</div>';
         }
     }
 }
@@ -1071,17 +1039,6 @@ async function eliminarEmpleado(empleadoId, nombreEmpleado) {
 // Generar y descargar gafete del empleado
 async function generarGafete(empleadoId, nombreCompleto, codigo, foto) {
     try {
-        const apiURL = window.API_CONFIG ? window.API_CONFIG.getBaseURL() : 'http://localhost:3000';
-        
-        // Obtener QR del empleado
-        const qrResponse = await fetch(`${apiURL}/api/empleados/${empleadoId}/qr`);
-        const qrData = await qrResponse.json();
-        
-        if (!qrData.success) {
-            alert('Error al obtener el código QR del empleado');
-            return;
-        }
-        
         // Crear canvas
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
@@ -1163,29 +1120,11 @@ async function generarGafete(empleadoId, nombreCompleto, codigo, foto) {
         ctx.textAlign = 'center';
         ctx.fillText(nombreCompleto, width / 2, 200);
         
-        // Cargar y dibujar QR
-        const qrImg = new Image();
-        qrImg.crossOrigin = 'anonymous';
-        
-        await new Promise((resolve, reject) => {
-            qrImg.onload = () => {
-                // QR en el centro
-                const qrSize = 200;
-                const qrX = (width - qrSize) / 2;
-                const qrY = 250;
-                
-                ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
-                resolve();
-            };
-            qrImg.onerror = reject;
-            qrImg.src = qrData.qr_image;
-        });
-        
-        // Código del QR
+        // Código del empleado (sin QR)
         ctx.fillStyle = '#000000';
-        ctx.font = '16px monospace';
+        ctx.font = 'bold 24px monospace';
         ctx.textAlign = 'center';
-        ctx.fillText(codigo || qrData.qr_text, width / 2, 480);
+        ctx.fillText(codigo || `EMP-${empleadoId}`, width / 2, 320);
         
         // Convertir canvas a imagen y descargar
         canvas.toBlob((blob) => {
