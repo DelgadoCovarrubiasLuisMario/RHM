@@ -149,6 +149,7 @@ function verDetalle(pagoId) {
                                 <th>Extras (Dobles)</th>
                                 <th>Extras (Triples)</th>
                                 <th>Horas Turno</th>
+                                <th>Extra Planta</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -156,21 +157,23 @@ function verDetalle(pagoId) {
 
         if (desglose.desglose_diario && desglose.desglose_diario.length > 0) {
             desglose.desglose_diario.forEach(dia => {
+                const turnoLabel = dia.turno === 4 || dia.turno === '4' ? 'Planta' : `Turno ${dia.turno}`;
                 html += `
                     <tr class="${dia.es_domingo ? 'domingo-row' : ''}">
                         <td>${dia.fecha} ${dia.es_domingo ? '🏖️ Domingo' : ''}</td>
-                        <td>Turno ${dia.turno}</td>
+                        <td>${turnoLabel}</td>
                         <td>${dia.hora_entrada}</td>
                         <td>${dia.hora_salida}</td>
                         <td><strong>${dia.horas_trabajadas}h</strong></td>
                         <td>${dia.horas_dobles}h</td>
                         <td>${dia.horas_triples}h</td>
                         <td>${dia.horas_turno || '0'}h</td>
+                        <td>${dia.horas_planta_extra || '0.00'}h</td>
                     </tr>
                 `;
             });
         } else {
-            html += '<tr><td colspan="8" class="empty-state">No hay registros para este período</td></tr>';
+            html += '<tr><td colspan="9" class="empty-state">No hay registros para este período</td></tr>';
         }
 
         html += `
@@ -201,6 +204,11 @@ function verDetalle(pagoId) {
                         <span class="calculo-label"><strong>Horas Turno (×2 ×0.95):</strong></span>
                         <span class="calculo-value">${desglose.resumen?.horas_turno || '0.00'}h</span>
                         <span class="calculo-monto"><strong>$${desglose.calculos?.monto_horas_turno || '0.00'}</strong></span>
+                    </div>
+                    <div class="calculo-item">
+                        <span class="calculo-label">Extra Turno Planta:</span>
+                        <span class="calculo-value">${desglose.resumen?.horas_planta_extra || '0.00'}h</span>
+                        <span class="calculo-monto">$${desglose.calculos?.monto_horas_planta_extra || '0.00'}</span>
                     </div>
         `;
 

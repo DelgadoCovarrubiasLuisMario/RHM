@@ -152,7 +152,7 @@ async function cargarDiasVacacionesDisponibles(empleadoId) {
             container.innerHTML = `
                 <div class="vacaciones-disponibles-info">
                     <span class="vacaciones-label">Días de vacaciones disponibles:</span>
-                    <span class="vacaciones-value">${data.dias_disponibles}/12</span>
+                    <span class="vacaciones-value">${data.dias_disponibles}/${data.dias_totales}</span>
                 </div>
             `;
         } else {
@@ -491,6 +491,7 @@ function abrirModalEmpleado() {
     form.reset();
     document.getElementById('empleadoId').value = '';
     document.getElementById('empleadoSueldo').value = '2000';
+    document.getElementById('empleadoDiasVacaciones').value = '12';
     eliminarFotoPreview(); // Limpiar foto
     
     titulo.textContent = 'Agregar Empleado';
@@ -522,7 +523,11 @@ async function editarEmpleado(empleadoId) {
             document.getElementById('empleadoApellido').value = empleado.apellido;
             document.getElementById('empleadoCargo').value = empleado.cargo && empleado.cargo !== 'Desconocido' ? empleado.cargo : '';
             document.getElementById('empleadoSueldo').value = empleado.sueldo_base || 2000;
-            
+            document.getElementById('empleadoDiasVacaciones').value =
+                empleado.dias_vacaciones_anuales !== undefined && empleado.dias_vacaciones_anuales !== null
+                    ? empleado.dias_vacaciones_anuales
+                    : 12;
+
             // Mostrar foto si existe
             if (empleado.foto) {
                 mostrarFotoPreview(empleado.foto);
@@ -551,6 +556,8 @@ async function guardarEmpleado(e) {
     const apellido = document.getElementById('empleadoApellido').value.trim();
     const cargo = document.getElementById('empleadoCargo').value.trim();
     const sueldo = document.getElementById('empleadoSueldo').value;
+    const diasVacRaw = document.getElementById('empleadoDiasVacaciones').value;
+    const diasVacaciones = parseInt(diasVacRaw, 10);
 
     if (!nombre || !apellido || !sueldo) {
         alert('❌ Por favor completa los campos requeridos (Nombre, Apellido, Sueldo Base)');
@@ -560,6 +567,11 @@ async function guardarEmpleado(e) {
     const sueldoNum = parseFloat(sueldo);
     if (isNaN(sueldoNum) || sueldoNum <= 0) {
         alert('❌ El sueldo base debe ser un número positivo');
+        return;
+    }
+
+    if (isNaN(diasVacaciones) || diasVacaciones < 0 || diasVacaciones > 365) {
+        alert('❌ Los días de vacaciones deben ser un número entre 0 y 365');
         return;
     }
 
@@ -574,7 +586,8 @@ async function guardarEmpleado(e) {
         apellido: apellido,
         cargo: (cargo && cargo.trim()) ? cargo.trim() : null,
         sueldo_base: sueldoNum,
-        foto: fotoBase64
+        foto: fotoBase64,
+        dias_vacaciones_anuales: diasVacaciones
     };
 
     try {

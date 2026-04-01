@@ -279,6 +279,8 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
     let horasNormalesTotales = 0; // Horas normales (hasta 8 por día, excepto domingo)
     let horasExtrasSemanales = 0; // Horas extras acumuladas
     let horasTurnoSemana = 0; // Horas turno acumuladas (máximo 6 por semana)
+    /** Turno 4 (Planta): salida entre 16:30 y 18:00 → +1.5 h al sueldo (tarifa normal) */
+    let horasPlantaExtraSemana = 0;
     const horasExtrasPorDia = []; // Para distribuir dobles/triples
     let diasTrabajados = 0; // Días con asistencia registrada (para calcular faltas)
 
@@ -356,6 +358,14 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
             
             // Solo procesar si hay horas trabajadas (aunque sean pocas, como 1 hora)
             if (horasTrabajadas > 0) {
+                if (!esDomingoDia && entrada.turno === 4) {
+                    const minSalida = horaAMinutos(salida.hora);
+                    const min1630 = 16 * 60 + 30;
+                    const min1800 = 18 * 60;
+                    if (minSalida >= min1630 && minSalida <= min1800) {
+                        horasPlantaExtraSemana += 1.5;
+                    }
+                }
                 if (!esDomingoDia) {
                     // Contar como día trabajado (para calcular faltas)
                     diasTrabajados++;
@@ -512,6 +522,16 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
                     }
                 }
 
+                let horasPlantaExtraDia = 0;
+                if (!esDomingoDia && entrada.turno === 4) {
+                    const minSalida = horaAMinutos(salida.hora);
+                    const min1630 = 16 * 60 + 30;
+                    const min1800 = 18 * 60;
+                    if (minSalida >= min1630 && minSalida <= min1800) {
+                        horasPlantaExtraDia = 1.5;
+                    }
+                }
+
                 desgloseDiario.push({
                     fecha,
                     es_domingo: esDomingoDia,
@@ -523,6 +543,7 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
                     horas_dobles: horasDoblesDia.toFixed(2),
                     horas_triples: horasTriplesDia.toFixed(2),
                     horas_turno: horasTurnoDia.toFixed(2),
+                    horas_planta_extra: horasPlantaExtraDia.toFixed(2),
                     es_vacaciones: false
                 });
             }
@@ -561,6 +582,7 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
                     horas_dobles: '0.00',
                     horas_triples: '0.00',
                     horas_turno: '0.00',
+                    horas_planta_extra: '0.00',
                     es_vacaciones: true
                 });
             }
@@ -581,6 +603,9 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
     // Horas turno: multiplicador 0.95 (no 0.85)
     const montoHorasTurno = horasTurnoSemana * pagoPorHora * 2 * 0.95;
 
+    // Turno Planta (4): bloque fijo +1.5 h × tarifa normal si salida 16:30–18:00
+    const montoHorasPlantaExtra = horasPlantaExtraSemana * pagoPorHora;
+
     // Descuento por faltas: se calcula por días faltados (solo para mostrar, NO se aplica)
     // Sueldo por día = Sueldo base / 6 días
     // Descuento = (Sueldo base / 6) × días faltados
@@ -592,7 +617,7 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
     // Calcular total semanal:
     // (Horas trabajadas con cálculos pertinentes) - (Solo descuentos varios, NO descuento por faltas)
     // El descuento por faltas se aplica naturalmente: si trabaja menos horas, gana menos
-    const totalGanado = sueldoBaseCalculado + montoHorasDobles + montoHorasTriples + montoHorasTurno;
+    const totalGanado = sueldoBaseCalculado + montoHorasDobles + montoHorasTriples + montoHorasTurno + montoHorasPlantaExtra;
     const totalBruto = totalGanado - descuentosVarios; // NO restar descuentoFaltas
     const total = Math.max(0, totalBruto); // El total no puede ser negativo (solo por descuentos varios)
 
@@ -603,6 +628,7 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
             horas_dobles: horasDobles.toFixed(2),
             horas_triples: horasTriples.toFixed(2),
             horas_turno: horasTurnoSemana.toFixed(2),
+            horas_planta_extra: horasPlantaExtraSemana.toFixed(2),
             dias_trabajados: diasTrabajados,
             dias_faltados: diasFaltados,
             dias_vacaciones: diasVacaciones
@@ -612,6 +638,7 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
             monto_horas_dobles: montoHorasDobles.toFixed(2),
             monto_horas_triples: montoHorasTriples.toFixed(2),
             monto_horas_turno: montoHorasTurno.toFixed(2),
+            monto_horas_planta_extra: montoHorasPlantaExtra.toFixed(2),
             descuento_faltas: descuentoFaltas.toFixed(2),
             descuentos_varios: descuentosVarios.toFixed(2)
         },

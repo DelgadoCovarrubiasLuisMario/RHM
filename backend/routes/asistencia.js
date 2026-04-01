@@ -289,11 +289,12 @@ router.post('/registrar', async (req, res) => {
         });
     }
 
-    // Validar turno
-    if (![1, 2, 3].includes(parseInt(turno))) {
+    // Validar turno (4 = Turno Planta 7:00–16:30, extras hasta 18:00 en cálculo de sueldo)
+    const turnoNum = parseInt(turno, 10);
+    if (![1, 2, 3, 4].includes(turnoNum)) {
         return res.status(400).json({ 
             success: false, 
-            message: 'Turno inválido. Debe ser 1, 2 o 3' 
+            message: 'Turno inválido. Debe ser 1, 2, 3 o 4 (Planta)' 
         });
     }
 

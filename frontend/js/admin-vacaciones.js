@@ -206,11 +206,15 @@ async function cargarVacaciones() {
         
         // Cargar todas las vacaciones sin filtrar por área
         let url = `${apiURL}/api/vacaciones/listar`;
+        const params = [];
         if (fechaDesde) {
-            url += `&fecha_desde=${convertirFecha(fechaDesde)}`;
+            params.push(`fecha_desde=${encodeURIComponent(convertirFecha(fechaDesde))}`);
         }
         if (fechaHasta) {
-            url += `&fecha_hasta=${convertirFecha(fechaHasta)}`;
+            params.push(`fecha_hasta=${encodeURIComponent(convertirFecha(fechaHasta))}`);
+        }
+        if (params.length > 0) {
+            url += `?${params.join('&')}`;
         }
 
         const response = await fetch(url);
@@ -262,6 +266,10 @@ function mostrarVacaciones(vacaciones, area) {
                     </div>
                     <div class="detalle-item">
                         <strong>Año:</strong> ${vacacion.año}
+                    </div>
+                    <div class="detalle-item">
+                        <strong>Disponibles:</strong> ${vacacion.dias_disponibles}/${vacacion.dias_totales}
+                        <small style="opacity: .8;">(Tomados: ${vacacion.dias_usados})</small>
                     </div>
                     ${vacacion.observaciones ? `<div class="observaciones"><strong>Observaciones:</strong> ${vacacion.observaciones}</div>` : ''}
                     <div class="detalle-item">

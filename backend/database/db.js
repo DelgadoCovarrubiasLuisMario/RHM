@@ -54,6 +54,7 @@ function createTables() {
             activo INTEGER DEFAULT 1,
             foto TEXT,
             cargo TEXT,
+            dias_vacaciones_anuales INTEGER DEFAULT 12,
             creado_en DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     `, (err) => {
@@ -72,6 +73,9 @@ function createTables() {
             db.run(`ALTER TABLE empleados ADD COLUMN cargo TEXT`, (err) => {
                 // Ignorar error si la columna ya existe
             });
+            db.run(`ALTER TABLE empleados ADD COLUMN dias_vacaciones_anuales INTEGER DEFAULT 12`, (err) => {
+                // Ignorar error si la columna ya existe
+            });
         }
     });
 
@@ -83,7 +87,7 @@ function createTables() {
             fecha TEXT NOT NULL,
             hora TEXT NOT NULL,
             movimiento TEXT NOT NULL CHECK(movimiento IN ('ENTRADA', 'SALIDA', 'INGRESO')),
-            turno INTEGER NOT NULL CHECK(turno IN (1, 2, 3)),
+            turno INTEGER NOT NULL CHECK(turno IN (1, 2, 3, 4)),
             area TEXT NOT NULL CHECK(area IN ('Planta', 'GeoCycle')),
             foto TEXT,
             creado_en DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -108,7 +112,7 @@ function createTables() {
                                 fecha TEXT NOT NULL,
                                 hora TEXT NOT NULL,
                                 movimiento TEXT NOT NULL CHECK(movimiento IN ('ENTRADA', 'SALIDA', 'INGRESO')),
-                                turno INTEGER NOT NULL CHECK(turno IN (1, 2, 3)),
+                                turno INTEGER NOT NULL CHECK(turno IN (1, 2, 3, 4)),
                                 area TEXT,
                                 foto TEXT,
                                 creado_en DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -393,7 +397,7 @@ function createTables() {
             empleado_id INTEGER,
             nombre_encargado TEXT,
             fecha TEXT NOT NULL,
-            turno INTEGER NOT NULL CHECK(turno IN (1, 2, 3)),
+            turno INTEGER NOT NULL CHECK(turno IN (1, 2, 3, 4)),
             toneladas REAL NOT NULL,
             area TEXT,
             puntos_rango_25_30 REAL DEFAULT 0,
@@ -423,7 +427,7 @@ function createTables() {
                                 empleado_id INTEGER,
                                 nombre_encargado TEXT,
                                 fecha TEXT NOT NULL,
-                                turno INTEGER NOT NULL CHECK(turno IN (1, 2, 3)),
+                                turno INTEGER NOT NULL CHECK(turno IN (1, 2, 3, 4)),
                                 toneladas REAL NOT NULL,
                                 area TEXT,
                                 puntos_rango_25_30 REAL DEFAULT 0,
@@ -560,8 +564,85 @@ function getDB() {
     return db;
 }
 
+/** Permite turno 4 (Planta) en bases creadas con CHECK solo 1–3 */
+function migrateAsistenciaTurno4() {
+    const database = db;
+    if (!database) return;
+
+    database.get(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='asistencia'",
+        (err, row) => {
+            if (err || !row || !row.sql) return;
+            const ddl = row.sql;
+            if (ddl.includes('1, 2, 3, 4)') || ddl.includes('1,2,3,4)')) {
+                return;
+            }
+            if (!ddl.includes('turno') || (!ddl.includes('(1, 2, 3)') && !ddl.includes('(1,2,3)'))) {
+                return;
+            }
+
+            console.log('🔄 Migrando tabla asistencia: permitir turno 4 (Planta)...');
+            database.serialize(() => {
+                database.run(
+                    `CREATE TABLE IF NOT EXISTS asistencia_turno4_mig (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        empleado_id INTEGER NOT NULL,
+                        fecha TEXT NOT NULL,
+                        hora TEXT NOT NULL,
+                        movimiento TEXT NOT NULL CHECK(movimiento IN ('ENTRADA', 'SALIDA', 'INGRESO')),
+                        turno INTEGER NOT NULL CHECK(turno IN (1, 2, 3, 4)),
+                        area TEXT,
+                        foto TEXT,
+                        creado_en DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (empleado_id) REFERENCES empleados(id)
+                    )`,
+                    (e1) => {
+                        if (e1) {
+                            console.error('Error creando asistencia_turno4_mig:', e1);
+                            return;
+                        }
+                        database.run(
+                            `INSERT INTO asistencia_turno4_mig SELECT id, empleado_id, fecha, hora, movimiento, turno, area, foto, creado_en FROM asistencia`,
+                            (e2) => {
+                                if (e2) {
+                                    console.error('Error copiando asistencia:', e2);
+                                    database.run('DROP TABLE IF EXISTS asistencia_turno4_mig');
+                                    return;
+                                }
+                                database.run('DROP TABLE asistencia', (e3) => {
+                                    if (e3) {
+                                        console.error(e3);
+                                        return;
+                                    }
+                                    database.run(
+                                        'ALTER TABLE asistencia_turno4_mig RENAME TO asistencia',
+                                        (e4) => {
+                                            if (e4) {
+                                                console.error(e4);
+                                                return;
+                                            }
+                                            console.log('✅ Migración turno 4 completada');
+                                            database.run(
+                                                'CREATE INDEX IF NOT EXISTS idx_asistencia_fecha_area ON asistencia(fecha, area)'
+                                            );
+                                            database.run(
+                                                'CREATE INDEX IF NOT EXISTS idx_asistencia_empleado ON asistencia(empleado_id)'
+                                            );
+                                        }
+                                    );
+                                });
+                            }
+                        );
+                    }
+                );
+            });
+        }
+    );
+}
+
 module.exports = {
     initDatabase,
-    getDB
+    getDB,
+    migrateAsistenciaTurno4
 };
 

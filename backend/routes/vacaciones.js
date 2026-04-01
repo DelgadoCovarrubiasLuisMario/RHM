@@ -18,7 +18,14 @@ router.get('/listar', (req, res) => {
             v.observaciones,
             v.creado_en,
             e.nombre || ' ' || e.apellido as nombre_empleado,
-            e.codigo as codigo_empleado
+            e.codigo as codigo_empleado,
+            COALESCE(e.dias_vacaciones_anuales, 12) as dias_totales,
+            COALESCE((
+                SELECT SUM(v2.dias)
+                FROM vacaciones v2
+                WHERE v2.empleado_id = v.empleado_id
+                  AND v2.año = v.año
+            ), 0) as dias_usados
         FROM vacaciones v
         INNER JOIN empleados e ON v.empleado_id = e.id
         WHERE 1=1
@@ -45,10 +52,21 @@ router.get('/listar', (req, res) => {
             });
         }
 
+        const data = vacaciones.map(vac => {
+            const diasTotales = Math.max(0, Math.min(365, parseInt(vac.dias_totales, 10) || 12));
+            const diasUsados = Math.max(0, parseInt(vac.dias_usados, 10) || 0);
+            return {
+                ...vac,
+                dias_totales: diasTotales,
+                dias_usados: diasUsados,
+                dias_disponibles: Math.max(0, diasTotales - diasUsados)
+            };
+        });
+
         res.json({
             success: true,
-            data: vacaciones,
-            total: vacaciones.length
+            data,
+            total: data.length
         });
     });
 });
@@ -92,29 +110,48 @@ router.get('/empleado/:empleado_id/disponibles', (req, res) => {
     // Si no se proporciona año, usar año actual
     const añoActual = año || new Date().getFullYear();
 
-    db.all(
-        `SELECT COALESCE(SUM(dias), 0) as dias_usados
-         FROM vacaciones
-         WHERE empleado_id = ? AND año = ?`,
-        [empleado_id, añoActual],
-        (err, result) => {
-            if (err) {
-                return res.status(500).json({ 
-                    success: false, 
-                    message: 'Error al calcular días disponibles: ' + err.message 
+    db.get(
+        `SELECT COALESCE(e.dias_vacaciones_anuales, 12) as dias_totales
+         FROM empleados e WHERE e.id = ?`,
+        [empleado_id],
+        (errEmp, empRow) => {
+            if (errEmp) {
+                return res.status(500).json({
+                    success: false,
+                    message: 'Error al obtener empleado: ' + errEmp.message
                 });
             }
+            if (!empRow) {
+                return res.status(404).json({ success: false, message: 'Empleado no encontrado' });
+            }
 
-            const diasUsados = result[0]?.dias_usados || 0;
-            const diasDisponibles = 12 - diasUsados;
+            const diasTotales = Math.max(0, Math.min(365, parseInt(empRow.dias_totales, 10) || 12));
 
-            res.json({
-                success: true,
-                año: añoActual,
-                dias_usados: diasUsados,
-                dias_disponibles: Math.max(0, diasDisponibles),
-                dias_totales: 12
-            });
+            db.all(
+                `SELECT COALESCE(SUM(dias), 0) as dias_usados
+                 FROM vacaciones
+                 WHERE empleado_id = ? AND año = ?`,
+                [empleado_id, añoActual],
+                (err, result) => {
+                    if (err) {
+                        return res.status(500).json({
+                            success: false,
+                            message: 'Error al calcular días disponibles: ' + err.message
+                        });
+                    }
+
+                    const diasUsados = result[0]?.dias_usados || 0;
+                    const diasDisponibles = diasTotales - diasUsados;
+
+                    res.json({
+                        success: true,
+                        año: añoActual,
+                        dias_usados: diasUsados,
+                        dias_disponibles: Math.max(0, diasDisponibles),
+                        dias_totales: diasTotales
+                    });
+                }
+            );
         }
     );
 });
@@ -209,7 +246,7 @@ router.post('/registrar', (req, res) => {
     const insertPromises = empleados_ids.map(empleado_id => {
         return new Promise((resolve, reject) => {
             // Verificar que el empleado existe
-            db.get('SELECT id, nombre, apellido FROM empleados WHERE id = ?', 
+            db.get('SELECT id, nombre, apellido, COALESCE(dias_vacaciones_anuales, 12) as dias_totales FROM empleados WHERE id = ?', 
                 [empleado_id], 
                 (err, empleado) => {
                     if (err) {
@@ -219,6 +256,8 @@ router.post('/registrar', (req, res) => {
                     if (!empleado) {
                         return reject(`Empleado con ID ${empleado_id} no encontrado`);
                     }
+
+                    const diasTotalesPermitidos = Math.max(0, Math.min(365, parseInt(empleado.dias_totales, 10) || 12));
 
                     // Validar solapamiento
                     validarSolapamiento(db, empleado_id, fecha_inicio, fecha_fin, (err) => {
@@ -238,8 +277,8 @@ router.post('/registrar', (req, res) => {
                                 }
 
                                 const diasUsados = result[0]?.dias_usados || 0;
-                                if (diasUsados + dias > 12) {
-                                    return reject(`${empleado.nombre} ${empleado.apellido} excede los 12 días disponibles (usados: ${diasUsados}, solicitados: ${dias})`);
+                                if (diasUsados + dias > diasTotalesPermitidos) {
+                                    return reject(`${empleado.nombre} ${empleado.apellido} excede los ${diasTotalesPermitidos} días disponibles (usados: ${diasUsados}, solicitados: ${dias})`);
                                 }
 
                                 // Insertar vacación

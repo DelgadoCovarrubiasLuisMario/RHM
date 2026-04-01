@@ -109,6 +109,13 @@ function mostrarSueldos(sueldos, periodo, area) {
                         <span class="resumen-value">${(parseFloat(sueldo.resumen.horas_dobles) + parseFloat(sueldo.resumen.horas_triples)).toFixed(2)}h</span>
                         <span class="resumen-detalle">(${sueldo.resumen.horas_dobles}h dobles + ${sueldo.resumen.horas_triples}h triples)</span>
                     </div>
+                    ${parseFloat(sueldo.resumen?.horas_planta_extra || 0) > 0 ? `
+                    <div class="resumen-item destacado">
+                        <span class="resumen-label">Extra Turno Planta:</span>
+                        <span class="resumen-value">${sueldo.resumen.horas_planta_extra}h</span>
+                        <span class="resumen-detalle">(salida 4:30–6:00 p. m.)</span>
+                    </div>
+                    ` : ''}
                     ${sueldo.calculos?.descuento_faltas > 0 ? `
                     <div class="resumen-item negativo" style="opacity: 0.7; font-style: italic;">
                         <span class="resumen-label">Descuento Faltas (info):</span>
@@ -177,6 +184,7 @@ function verDesglose(empleadoId, nombreEmpleado) {
                             <th>Extras (Dobles)</th>
                             <th>Extras (Triples)</th>
                             <th>Horas Turno</th>
+                            <th>Extra Planta</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -184,10 +192,11 @@ function verDesglose(empleadoId, nombreEmpleado) {
 
     if (datosSueldo.desglose_diario && datosSueldo.desglose_diario.length > 0) {
         datosSueldo.desglose_diario.forEach(dia => {
+            const turnoLabel = dia.turno === 4 || dia.turno === '4' ? 'Planta' : `Turno ${dia.turno}`;
             html += `
                 <tr class="${dia.es_domingo ? 'domingo-row' : ''}">
                     <td>${dia.fecha} ${dia.es_domingo ? '🏖️ Domingo' : ''}</td>
-                    <td>Turno ${dia.turno}</td>
+                    <td>${turnoLabel}</td>
                     <td>${dia.hora_entrada}</td>
                     <td>${dia.hora_salida}</td>
                     <td><strong>${dia.horas_trabajadas}h</strong></td>
@@ -195,11 +204,12 @@ function verDesglose(empleadoId, nombreEmpleado) {
                     <td>${dia.horas_dobles}h</td>
                     <td>${dia.horas_triples}h</td>
                     <td>${dia.horas_turno || '0'}h</td>
+                    <td>${dia.horas_planta_extra || '0.00'}h</td>
                 </tr>
             `;
         });
         } else {
-            html += '<tr><td colspan="9" class="empty-state">No hay registros para este período</td></tr>';
+            html += '<tr><td colspan="10" class="empty-state">No hay registros para este período</td></tr>';
         }
 
     html += `
@@ -230,6 +240,11 @@ function verDesglose(empleadoId, nombreEmpleado) {
                     <span class="calculo-label"><strong>Horas Turno (×2 ×0.95):</strong></span>
                     <span class="calculo-value">${datosSueldo.resumen?.horas_turno || '0.00'}h</span>
                     <span class="calculo-monto"><strong>$${datosSueldo.calculos?.monto_horas_turno || '0.00'}</strong></span>
+                </div>
+                <div class="calculo-item">
+                    <span class="calculo-label">Extra Turno Planta (tarifa normal × horas):</span>
+                    <span class="calculo-value">${datosSueldo.resumen?.horas_planta_extra || '0.00'}h</span>
+                    <span class="calculo-monto">$${datosSueldo.calculos?.monto_horas_planta_extra || '0.00'}</span>
                 </div>
                 ${datosSueldo.calculos?.descuento_faltas > 0 ? `
                 <div class="calculo-item negativo" style="opacity: 0.7; font-style: italic;">

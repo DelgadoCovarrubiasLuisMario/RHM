@@ -38,20 +38,14 @@
                     </div>
                 </div>
 
-                <!-- Código (QR o Manual) -->
+                <!-- Código o nombre (sin QR: evita conflictos de cámara) -->
                 <div class="form-group">
                     <label for="codigo">Código o Nombre *</label>
                     <div class="input-with-icon">
                         <input type="text" id="codigo" placeholder="Buscar por nombre o código" required autocomplete="off" autofocus>
-                        <button type="button" class="btn-qr" id="btnEscanearQR" onclick="activarEscanner()" title="Escanear código QR">
-                            <span class="qr-icon">📷</span>
-                        </button>
                     </div>
                     <div id="listaEmpleados" class="lista-empleados" style="display: none;"></div>
-                    <small class="help-text">Escribe el nombre o código del empleado, o usa el botón 📷 para escanear QR</small>
-                    <div id="qr-reader" class="qr-reader-container" style="display: none;">
-                        <button type="button" id="btnCerrarQR" onclick="cerrarEscanner()" style="position: absolute; top: 10px; right: 10px; background: #dc3545; color: white; border: none; border-radius: 50%; width: 40px; height: 40px; font-size: 24px; cursor: pointer; z-index: 1000; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.3); line-height: 1;" title="Cerrar escáner">×</button>
-                    </div>
+                    <small class="help-text">Escribe el nombre o el código del empleado y elígelo de la lista</small>
                 </div>
 
                 <!-- Movimiento -->
@@ -71,7 +65,7 @@
                 <!-- Turno -->
                 <div class="form-group">
                     <label>Turno *</label>
-                    <div class="turno-buttons">
+                    <div class="turno-buttons turno-buttons-grid">
                         <button type="button" class="turno-btn" data-turno="1" onclick="seleccionarTurno(1)">
                             Turno 1<br><small>11pm - 7am</small>
                         </button>
@@ -81,7 +75,11 @@
                         <button type="button" class="turno-btn" data-turno="3" onclick="seleccionarTurno(3)">
                             Turno 3<br><small>3pm - 11pm</small>
                         </button>
+                        <button type="button" class="turno-btn" data-turno="4" onclick="seleccionarTurno(4)" title="Jornada 7:00–16:30; salida 16:30–18:00 suma 1.5 h extra en nómina">
+                            Turno Planta<br><small>7am - 4:30pm</small>
+                        </button>
                     </div>
+                    <small class="help-text">Turno Planta: si la salida está entre 4:30 y 6:00 p. m., en el cálculo de sueldo se agregan 1.5 h extra.</small>
                     <input type="hidden" id="turno" required>
                 </div>
 
@@ -100,8 +98,6 @@
     <!-- Configuración de API -->
     <script src="../js/theme.js"></script>
     <script src="../js/config.js"></script>
-    <!-- Librería para escanear QR (usaremos html5-qrcode) -->
-    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <script src="../js/registro-asistencia.js"></script>
 </body>
 </html>

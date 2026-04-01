@@ -7,7 +7,7 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const path = require('path');
-const { initDatabase, getDB } = require('./database/db');
+const { initDatabase, getDB, migrateAsistenciaTurno4 } = require('./database/db');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -22,6 +22,7 @@ app.use(express.static(path.join(__dirname, '../frontend')));
 
 // Inicializar base de datos
 initDatabase();
+setTimeout(() => migrateAsistenciaTurno4(), 1000);
 
 // Ruta principal - redirige al login
 app.get('/', (req, res) => {

@@ -39,17 +39,13 @@
                         </div>
                     </div>
 
-                    <!-- Código (QR o Búsqueda) -->
                     <div class="form-group">
-                        <label for="codigo">Código *</label>
+                        <label for="codigo">Código o nombre *</label>
                         <div class="input-with-icon">
-                            <input type="text" id="codigo" placeholder="Buscar empleado o escanear QR" required autocomplete="off">
-                            <button type="button" class="btn-qr" id="btnEscanearQR" onclick="activarEscanner()" title="Escanear código QR">
-                                <span class="qr-icon">📷</span>
-                            </button>
+                            <input type="text" id="codigo" placeholder="Buscar por nombre o código" required autocomplete="off">
                         </div>
                         <div id="listaEmpleados" class="lista-empleados" style="display: none;"></div>
-                        <div id="qr-reader" class="qr-reader-container" style="display: none;"></div>
+                        <small class="help-text">Escribe y elige de la lista (sin escáner QR).</small>
                     </div>
 
                     <!-- Movimiento -->
@@ -69,7 +65,7 @@
                     <!-- Turno -->
                     <div class="form-group">
                         <label>Turno *</label>
-                        <div class="turno-buttons">
+                        <div class="turno-buttons turno-buttons-grid">
                             <button type="button" class="turno-btn" data-turno="1" onclick="seleccionarTurno(1)">
                                 Turno 1<br><small>11pm - 7am</small>
                             </button>
@@ -78,6 +74,9 @@
                             </button>
                             <button type="button" class="turno-btn" data-turno="3" onclick="seleccionarTurno(3)">
                                 Turno 3<br><small>3pm - 11pm</small>
+                            </button>
+                            <button type="button" class="turno-btn" data-turno="4" onclick="seleccionarTurno(4)">
+                                Turno Planta<br><small>7am - 4:30pm</small>
                             </button>
                         </div>
                         <input type="hidden" id="turno" required>
@@ -98,7 +97,6 @@
     <!-- Scripts -->
     <script src="../js/theme.js"></script>
     <script src="../js/config.js"></script>
-    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <script src="../js/perfil-empleado.js"></script>
 </body>
 </html>

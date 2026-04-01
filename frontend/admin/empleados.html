@@ -132,6 +132,12 @@
                         <label for="empleadoSueldo">Sueldo Base ($) *</label>
                         <input type="number" id="empleadoSueldo" step="0.01" min="0" placeholder="2000" value="2000" required>
                     </div>
+
+                    <div class="form-group">
+                        <label for="empleadoDiasVacaciones">Días de vacaciones al año (por empleado)</label>
+                        <input type="number" id="empleadoDiasVacaciones" min="0" max="365" step="1" value="12" title="Ajusta según antigüedad o política (12 por defecto)">
+                        <small class="help-text">Se usa para el tope de vacaciones de este empleado. Edita y guarda al crear o con “Editar”.</small>
+                    </div>
                     
                     <div class="form-group">
                         <label for="empleadoFoto">Foto del Empleado</label>

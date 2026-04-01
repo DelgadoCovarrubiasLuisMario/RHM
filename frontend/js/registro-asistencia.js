@@ -1,5 +1,4 @@
 // Variables globales
-let html5QrcodeScanner = null;
 let movimientoSeleccionado = null;
 let turnoSeleccionado = null;
 let todosLosEmpleados = [];
@@ -29,7 +28,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Cerrar lista al hacer clic fuera
     document.addEventListener('click', function(e) {
-        if (!e.target.closest('#codigo') && !e.target.closest('#listaEmpleados') && !e.target.closest('#btnEscanearQR')) {
+        if (!e.target.closest('#codigo') && !e.target.closest('#listaEmpleados')) {
             const listaEmpleados = document.getElementById('listaEmpleados');
             if (listaEmpleados) {
                 listaEmpleados.style.display = 'none';
@@ -121,7 +120,6 @@ function mostrarListaEmpleadosFiltrada(empleados) {
 function seleccionarEmpleado(codigo, nombre) {
     document.getElementById('codigo').value = codigo;
     document.getElementById('listaEmpleados').style.display = 'none';
-    cerrarEscanner();
 }
 
 // Actualizar fecha y hora en tiempo real
@@ -175,125 +173,6 @@ function seleccionarTurno(turno) {
     });
 }
 
-// Activar escáner QR
-function activarEscanner() {
-    const qrReaderContainer = document.getElementById('qr-reader');
-    const codigoInput = document.getElementById('codigo');
-    
-    if (html5QrcodeScanner) {
-        // Si ya existe, detenerlo
-        cerrarEscanner();
-        return;
-    }
-
-    // Crear nuevo escáner
-    qrReaderContainer.style.display = 'block';
-    
-    // Limpiar cualquier escáner anterior
-    const existingScanner = document.getElementById('qr-scanner-inner');
-    if (existingScanner) {
-        existingScanner.remove();
-    }
-    
-    // Crear un div específico para el escáner dentro del contenedor
-    const scannerDiv = document.createElement('div');
-    scannerDiv.id = 'qr-scanner-inner';
-    // Insertar antes del botón de cerrar
-    const btnCerrar = document.getElementById('btnCerrarQR');
-    if (btnCerrar) {
-        qrReaderContainer.insertBefore(scannerDiv, btnCerrar);
-    } else {
-        qrReaderContainer.appendChild(scannerDiv);
-    }
-    
-    html5QrcodeScanner = new Html5Qrcode("qr-scanner-inner");
-
-    const tamanioQR = Math.max(180, Math.min(320, Math.floor((window.innerWidth || 360) * 0.7)));
-    const configScanner = {
-        fps: 10,
-        qrbox: { width: tamanioQR, height: tamanioQR },
-        aspectRatio: 1.0
-    };
-
-    const onSuccess = (decodedText) => {
-        codigoInput.value = decodedText;
-        const listaEmpleados = document.getElementById('listaEmpleados');
-        if (listaEmpleados) {
-            listaEmpleados.style.display = 'none';
-        }
-        cerrarEscanner().then(() => new Promise(r => setTimeout(r, 250)));
-    };
-
-    const onError = () => {
-        // Errores continuos de lectura se ignoran.
-    };
-
-    html5QrcodeScanner.start({ facingMode: { ideal: "environment" } }, configScanner, onSuccess, onError)
-        .catch(() => {
-            // Fallback: intentar cámara frontal si la trasera no está disponible.
-            return html5QrcodeScanner.start({ facingMode: "user" }, configScanner, onSuccess, onError);
-        })
-        .catch(async (err) => {
-            // Último intento: abrir por deviceId (primer dispositivo de video disponible).
-            try {
-                const devices = await Html5Qrcode.getCameras();
-                if (devices && devices.length > 0) {
-                    return html5QrcodeScanner.start(
-                        { deviceId: { exact: devices[0].id } },
-                        configScanner,
-                        onSuccess,
-                        onError
-                    );
-                }
-                throw err;
-            } catch (finalErr) {
-                console.error("Error al iniciar escáner:", finalErr);
-                const detalle = finalErr && finalErr.name ? ` (${finalErr.name})` : '';
-                alert(`Error al iniciar la cámara${detalle}. Verifica HTTPS y que ninguna otra app esté usando la cámara.`);
-                cerrarEscanner();
-            }
-        });
-}
-
-// Cerrar escáner QR (devuelve Promise para liberar la cámara trasera antes de la foto)
-function cerrarEscanner() {
-    const qrReaderContainer = document.getElementById('qr-reader');
-    if (!qrReaderContainer) {
-        return Promise.resolve();
-    }
-
-    if (html5QrcodeScanner) {
-        return html5QrcodeScanner.stop().then(() => {
-            try {
-                html5QrcodeScanner.clear();
-            } catch (e) {
-                /* ignore */
-            }
-            html5QrcodeScanner = null;
-            const scannerDiv = document.getElementById('qr-scanner-inner');
-            if (scannerDiv) {
-                scannerDiv.remove();
-            }
-            qrReaderContainer.style.display = 'none';
-        }).catch((err) => {
-            console.error('Error al detener escáner:', err);
-            html5QrcodeScanner = null;
-            const scannerDiv = document.getElementById('qr-scanner-inner');
-            if (scannerDiv) {
-                scannerDiv.remove();
-            }
-            qrReaderContainer.style.display = 'none';
-        });
-    }
-
-    qrReaderContainer.style.display = 'none';
-    const scannerDiv = document.getElementById('qr-scanner-inner');
-    if (scannerDiv) {
-        scannerDiv.remove();
-    }
-    return Promise.resolve();
-}
-
 function esContextoSeguroParaCamara() {
     const host = window.location.hostname;
     const esLocalhost = host === 'localhost' || host === '127.0.0.1' || host === '::1';
@@ -322,7 +201,7 @@ async function solicitarStreamCamara() {
 
 function esperarVideoListo(video) {
     return new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error('Timeout cargando video')), 4000);
+        const timeout = setTimeout(() => reject(new Error('Timeout cargando video')), 3000);
 
         video.onloadedmetadata = () => {
             clearTimeout(timeout);
@@ -356,9 +235,6 @@ async function capturarFoto() {
     }
 
     try {
-        await cerrarEscanner();
-        await new Promise(r => setTimeout(r, 250));
-
         videoElement = document.createElement('video');
         videoElement.style.position = 'fixed';
         videoElement.style.top = '-9999px';
@@ -375,8 +251,7 @@ async function capturarFoto() {
 
         await esperarVideoListo(videoElement);
         await videoElement.play();
-
-        await new Promise(resolve => setTimeout(resolve, 600));
+        await new Promise(requestAnimationFrame);
 
         const canvas = document.createElement('canvas');
         canvas.width = videoElement.videoWidth || 640;
@@ -435,9 +310,9 @@ document.getElementById('registroForm').addEventListener('submit', async functio
     // Deshabilitar botón mientras se procesa
     const submitBtn = this.querySelector('button[type="submit"]');
     submitBtn.disabled = true;
-    submitBtn.textContent = 'Capturando foto...';
+    submitBtn.textContent = 'Guardando...';
 
-    // Capturar foto automáticamente (solo para ENTRADA)
+    // Capturar foto automáticamente (solo para ENTRADA / INGRESO), sin demoras artificiales
     let fotoBase64 = null;
     try {
         fotoBase64 = await capturarFoto();
@@ -445,8 +320,6 @@ document.getElementById('registroForm').addEventListener('submit', async functio
         console.error('Error al capturar foto:', error);
         // Continuar sin foto si hay error
     }
-
-    submitBtn.textContent = 'Guardando...';
 
     try {
         const apiURL = window.API_CONFIG ? window.API_CONFIG.getBaseURL() : 'http://localhost:3000';

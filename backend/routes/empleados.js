@@ -15,7 +15,8 @@ router.get('/listar', (req, res) => {
     const db = getDB();
 
     db.all(
-        `SELECT id, codigo, nombre, apellido, email, telefono, sueldo_base, activo, foto, COALESCE(cargo, 'Desconocido') as cargo
+        `SELECT id, codigo, nombre, apellido, email, telefono, sueldo_base, activo, foto, COALESCE(cargo, 'Desconocido') as cargo,
+                COALESCE(dias_vacaciones_anuales, 12) as dias_vacaciones_anuales
          FROM empleados 
          WHERE activo = 1
          ORDER BY nombre, apellido`,
@@ -86,7 +87,8 @@ router.get('/:empleado_id', (req, res) => {
     const db = getDB();
 
     db.get(
-        `SELECT id, codigo, nombre, apellido, email, telefono, sueldo_base, activo, foto, COALESCE(cargo, 'Desconocido') as cargo
+        `SELECT id, codigo, nombre, apellido, email, telefono, sueldo_base, activo, foto, COALESCE(cargo, 'Desconocido') as cargo,
+                COALESCE(dias_vacaciones_anuales, 12) as dias_vacaciones_anuales
          FROM empleados 
          WHERE id = ?`,
         [empleado_id],
@@ -115,7 +117,7 @@ router.get('/:empleado_id', (req, res) => {
 
 // Crear nuevo empleado
 router.post('/', (req, res) => {
-    const { nombre, apellido, email, telefono, sueldo_base, cargo, foto } = req.body;
+    const { nombre, apellido, email, telefono, sueldo_base, cargo, foto, dias_vacaciones_anuales } = req.body;
     const db = getDB();
 
     // Validar campos requeridos
@@ -138,11 +140,19 @@ router.post('/', (req, res) => {
     // Generar código único
     const codigo = generarCodigo(nombre, apellido);
 
+    let diasVac = 12;
+    if (dias_vacaciones_anuales !== undefined && dias_vacaciones_anuales !== null && dias_vacaciones_anuales !== '') {
+        const d = parseInt(dias_vacaciones_anuales, 10);
+        if (!isNaN(d) && d >= 0 && d <= 365) {
+            diasVac = d;
+        }
+    }
+
     // Insertar empleado
     db.run(
-        `INSERT INTO empleados (codigo, nombre, apellido, email, telefono, sueldo_base, cargo, activo, foto)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [codigo, nombre.trim(), apellido.trim(), null, null, sueldoBase, cargo || null, 1, foto || null],
+        `INSERT INTO empleados (codigo, nombre, apellido, email, telefono, sueldo_base, cargo, activo, foto, dias_vacaciones_anuales)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [codigo, nombre.trim(), apellido.trim(), null, null, sueldoBase, cargo || null, 1, foto || null, diasVac],
         function(err) {
             if (err) {
                 if (err.message.includes('UNIQUE constraint failed')) {
@@ -176,7 +186,7 @@ router.post('/', (req, res) => {
 // Actualizar empleado
 router.put('/:empleado_id', (req, res) => {
     const { empleado_id } = req.params;
-    const { nombre, apellido, email, telefono, sueldo_base, cargo, activo, foto } = req.body;
+    const { nombre, apellido, email, telefono, sueldo_base, cargo, activo, foto, dias_vacaciones_anuales } = req.body;
     const db = getDB();
 
     // Validar que el empleado existe
@@ -231,6 +241,17 @@ router.put('/:empleado_id', (req, res) => {
             if (foto !== undefined) {
                 updates.push('foto = ?');
                 values.push(foto || null);
+            }
+            if (dias_vacaciones_anuales !== undefined) {
+                const d = parseInt(dias_vacaciones_anuales, 10);
+                if (isNaN(d) || d < 0 || d > 365) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'dias_vacaciones_anuales debe ser un entero entre 0 y 365'
+                    });
+                }
+                updates.push('dias_vacaciones_anuales = ?');
+                values.push(d);
             }
 
             if (updates.length === 0) {
