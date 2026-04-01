@@ -1,3 +1,8 @@
+// Zona horaria por defecto (Droplet suele estar en UTC; asistencia y cálculos usan hora local MX)
+if (!process.env.TZ) {
+    process.env.TZ = 'America/Mexico_City';
+}
+
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');

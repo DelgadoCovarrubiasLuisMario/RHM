@@ -121,6 +121,7 @@ function mostrarListaEmpleadosFiltrada(empleados) {
 function seleccionarEmpleado(codigo, nombre) {
     document.getElementById('codigo').value = codigo;
     document.getElementById('listaEmpleados').style.display = 'none';
+    cerrarEscanner();
 }
 
 // Actualizar fecha y hora en tiempo real
@@ -206,51 +207,76 @@ function activarEscanner() {
     }
     
     html5QrcodeScanner = new Html5Qrcode("qr-scanner-inner");
-    
-    html5QrcodeScanner.start(
-        { facingMode: "environment" }, // Usar cámara trasera
-        {
-            fps: 10,
-            qrbox: { width: 450, height: 450 },
-            aspectRatio: 1.0
-        },
-        (decodedText, decodedResult) => {
-            // QR escaneado exitosamente
-            codigoInput.value = decodedText;
-            // Ocultar lista de empleados si está visible
-            const listaEmpleados = document.getElementById('listaEmpleados');
-            if (listaEmpleados) {
-                listaEmpleados.style.display = 'none';
-            }
-            // Detener y cerrar el escáner
-            cerrarEscanner();
-        },
-        (errorMessage) => {
-            // Error al escanear (ignorar errores continuos)
+
+    const tamanioQR = Math.max(180, Math.min(320, Math.floor((window.innerWidth || 360) * 0.7)));
+    const configScanner = {
+        fps: 10,
+        qrbox: { width: tamanioQR, height: tamanioQR },
+        aspectRatio: 1.0
+    };
+
+    const onSuccess = (decodedText) => {
+        codigoInput.value = decodedText;
+        const listaEmpleados = document.getElementById('listaEmpleados');
+        if (listaEmpleados) {
+            listaEmpleados.style.display = 'none';
         }
-    ).catch((err) => {
-        console.error("Error al iniciar escáner:", err);
-        alert('Error al activar la cámara. Asegúrate de dar permisos de cámara.');
-        cerrarEscanner();
-    });
+        cerrarEscanner().then(() => new Promise(r => setTimeout(r, 250)));
+    };
+
+    const onError = () => {
+        // Errores continuos de lectura se ignoran.
+    };
+
+    html5QrcodeScanner.start({ facingMode: { ideal: "environment" } }, configScanner, onSuccess, onError)
+        .catch(() => {
+            // Fallback: intentar cámara frontal si la trasera no está disponible.
+            return html5QrcodeScanner.start({ facingMode: "user" }, configScanner, onSuccess, onError);
+        })
+        .catch(async (err) => {
+            // Último intento: abrir por deviceId (primer dispositivo de video disponible).
+            try {
+                const devices = await Html5Qrcode.getCameras();
+                if (devices && devices.length > 0) {
+                    return html5QrcodeScanner.start(
+                        { deviceId: { exact: devices[0].id } },
+                        configScanner,
+                        onSuccess,
+                        onError
+                    );
+                }
+                throw err;
+            } catch (finalErr) {
+                console.error("Error al iniciar escáner:", finalErr);
+                const detalle = finalErr && finalErr.name ? ` (${finalErr.name})` : '';
+                alert(`Error al iniciar la cámara${detalle}. Verifica HTTPS y que ninguna otra app esté usando la cámara.`);
+                cerrarEscanner();
+            }
+        });
 }
 
-// Cerrar escáner QR
+// Cerrar escáner QR (devuelve Promise para liberar la cámara trasera antes de la foto)
 function cerrarEscanner() {
     const qrReaderContainer = document.getElementById('qr-reader');
-    
+    if (!qrReaderContainer) {
+        return Promise.resolve();
+    }
+
     if (html5QrcodeScanner) {
-        html5QrcodeScanner.stop().then(() => {
-            html5QrcodeScanner.clear();
+        return html5QrcodeScanner.stop().then(() => {
+            try {
+                html5QrcodeScanner.clear();
+            } catch (e) {
+                /* ignore */
+            }
             html5QrcodeScanner = null;
-            // Limpiar el contenedor
             const scannerDiv = document.getElementById('qr-scanner-inner');
             if (scannerDiv) {
                 scannerDiv.remove();
             }
             qrReaderContainer.style.display = 'none';
         }).catch((err) => {
-            console.error("Error al detener escáner:", err);
+            console.error('Error al detener escáner:', err);
             html5QrcodeScanner = null;
             const scannerDiv = document.getElementById('qr-scanner-inner');
             if (scannerDiv) {
@@ -258,38 +284,81 @@ function cerrarEscanner() {
             }
             qrReaderContainer.style.display = 'none';
         });
-    } else {
-        qrReaderContainer.style.display = 'none';
-        const scannerDiv = document.getElementById('qr-scanner-inner');
-        if (scannerDiv) {
-            scannerDiv.remove();
+    }
+
+    qrReaderContainer.style.display = 'none';
+    const scannerDiv = document.getElementById('qr-scanner-inner');
+    if (scannerDiv) {
+        scannerDiv.remove();
+    }
+    return Promise.resolve();
+}
+
+function esContextoSeguroParaCamara() {
+    const host = window.location.hostname;
+    const esLocalhost = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+    return window.isSecureContext || esLocalhost;
+}
+
+async function solicitarStreamCamara() {
+    const intentos = [
+        { video: { facingMode: { ideal: 'user' }, width: { ideal: 640 }, height: { ideal: 480 } }, audio: false },
+        { video: { facingMode: 'user' }, audio: false },
+        { video: true, audio: false }
+    ];
+
+    let ultimoError = null;
+    for (const constraints of intentos) {
+        try {
+            return await navigator.mediaDevices.getUserMedia(constraints);
+        } catch (error) {
+            ultimoError = error;
+            console.warn('⚠️ Intento de cámara fallido con constraints:', constraints, error);
         }
     }
+
+    throw ultimoError || new Error('No fue posible obtener stream de cámara');
+}
+
+function esperarVideoListo(video) {
+    return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Timeout cargando video')), 4000);
+
+        video.onloadedmetadata = () => {
+            clearTimeout(timeout);
+            resolve();
+        };
+
+        video.onerror = (err) => {
+            clearTimeout(timeout);
+            reject(err || new Error('Error en video'));
+        };
+    });
 }
 
 // Capturar foto automáticamente (solo para ENTRADA)
 async function capturarFoto() {
-    return new Promise((resolve, reject) => {
-        // Solo capturar foto si es ENTRADA o INGRESO
-        const movimiento = document.getElementById('movimiento').value;
-        console.log('📸 Intentando capturar foto para movimiento:', movimiento);
-        
-        if (movimiento !== 'ENTRADA' && movimiento !== 'INGRESO') {
-            console.log('📸 No se captura foto (no es ENTRADA)');
-            resolve(null);
-            return;
-        }
+    const movimiento = document.getElementById('movimiento').value;
+    console.log('📸 Intentando capturar foto para movimiento:', movimiento);
 
-        // Verificar si el navegador soporta getUserMedia
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            console.warn('⚠️ getUserMedia no está disponible');
-            resolve(null);
-            return;
-        }
+    if (movimiento !== 'ENTRADA' && movimiento !== 'INGRESO') {
+        return null;
+    }
 
-        console.log('📸 Iniciando captura de foto...');
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.warn('⚠️ getUserMedia no está disponible');
+        return null;
+    }
 
-        // Crear elemento de video temporal
+    if (!esContextoSeguroParaCamara()) {
+        mostrarMensaje('⚠️ La cámara requiere HTTPS. Abre la app con https:// para capturar foto.', 'error');
+        return null;
+    }
+
+    try {
+        await cerrarEscanner();
+        await new Promise(r => setTimeout(r, 250));
+
         videoElement = document.createElement('video');
         videoElement.style.position = 'fixed';
         videoElement.style.top = '-9999px';
@@ -297,73 +366,34 @@ async function capturarFoto() {
         videoElement.style.height = '240px';
         videoElement.autoplay = true;
         videoElement.playsInline = true;
+        videoElement.setAttribute('playsinline', 'true');
         videoElement.muted = true;
         document.body.appendChild(videoElement);
 
-        // Obtener acceso a la cámara frontal
-        navigator.mediaDevices.getUserMedia({ 
-            video: { 
-                facingMode: 'user', // Cámara frontal
-                width: { ideal: 640 },
-                height: { ideal: 480 }
-            } 
-        })
-        .then(mediaStream => {
-            console.log('✅ Cámara accedida correctamente');
-            stream = mediaStream;
-            videoElement.srcObject = stream;
-            
-            // Esperar a que el video esté listo
-            videoElement.onloadedmetadata = () => {
-                console.log('📸 Video cargado, reproduciendo...');
-                videoElement.play().then(() => {
-                    console.log('📸 Video reproduciéndose, esperando estabilización...');
-                    // Esperar un momento para que la cámara se estabilice
-                    setTimeout(() => {
-                        try {
-                            console.log('📸 Capturando foto...');
-                            // Crear canvas para capturar la foto
-                            const canvas = document.createElement('canvas');
-                            canvas.width = videoElement.videoWidth;
-                            canvas.height = videoElement.videoHeight;
-                            const ctx = canvas.getContext('2d');
-                            ctx.drawImage(videoElement, 0, 0);
-                            
-                            // Convertir a base64
-                            const fotoBase64 = canvas.toDataURL('image/jpeg', 0.8);
-                            console.log('✅ Foto capturada correctamente, tamaño:', fotoBase64.length, 'bytes');
-                            
-                            // Limpiar
-                            detenerCamara();
-                            
-                            resolve(fotoBase64);
-                        } catch (error) {
-                            console.error('❌ Error al capturar foto:', error);
-                            detenerCamara();
-                            resolve(null);
-                        }
-                    }, 1000); // Esperar 1 segundo para estabilizar
-                }).catch(err => {
-                    console.error('❌ Error al reproducir video:', err);
-                    detenerCamara();
-                    resolve(null);
-                });
-            };
-            
-            videoElement.onerror = (err) => {
-                console.error('❌ Error en el elemento video:', err);
-                detenerCamara();
-                resolve(null);
-            };
-        })
-        .catch(err => {
-            console.error('❌ Error al acceder a la cámara:', err);
-            alert('⚠️ No se pudo acceder a la cámara. El registro continuará sin foto.');
-            detenerCamara();
-            // Si falla la cámara, continuar sin foto
-            resolve(null);
-        });
-    });
+        stream = await solicitarStreamCamara();
+        videoElement.srcObject = stream;
+
+        await esperarVideoListo(videoElement);
+        await videoElement.play();
+
+        await new Promise(resolve => setTimeout(resolve, 600));
+
+        const canvas = document.createElement('canvas');
+        canvas.width = videoElement.videoWidth || 640;
+        canvas.height = videoElement.videoHeight || 480;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+
+        const fotoBase64 = canvas.toDataURL('image/jpeg', 0.8);
+        console.log('✅ Foto capturada correctamente, tamaño:', fotoBase64.length);
+        detenerCamara();
+        return fotoBase64;
+    } catch (error) {
+        console.error('❌ Error al capturar foto:', error);
+        detenerCamara();
+        mostrarMensaje('⚠️ No se pudo tomar foto en este dispositivo. El registro se guardará sin foto.', 'error');
+        return null;
+    }
 }
 
 // Detener cámara
@@ -429,7 +459,9 @@ document.getElementById('registroForm').addEventListener('submit', async functio
                 codigo,
                 movimiento,
                 turno: parseInt(turno),
-                foto: fotoBase64
+                foto: fotoBase64,
+                fecha: document.getElementById('fecha').value,
+                hora: document.getElementById('hora').value
             })
         });
 

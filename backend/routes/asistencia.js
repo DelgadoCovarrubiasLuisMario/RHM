@@ -2,6 +2,46 @@ const express = require('express');
 const router = express.Router();
 const { getDB } = require('../database/db');
 
+/** Valida strings DD/MM/YYYY y hora con formato de pantalla (12h) */
+function esFechaHoraAsistenciaValida(fechaStr, horaStr) {
+    if (!fechaStr || !horaStr || typeof fechaStr !== 'string' || typeof horaStr !== 'string') {
+        return false;
+    }
+    const fecha = fechaStr.trim();
+    const hora = horaStr.trim();
+    if (!/^\d{2}\/\d{2}\/\d{4}$/.test(fecha)) {
+        return false;
+    }
+    const [dia, mes, año] = fecha.split('/').map(Number);
+    if (mes < 1 || mes > 12 || dia < 1 || dia > 31 || año < 2000 || año > 2100) {
+        return false;
+    }
+    if (!hora.match(/\d{1,2}:\d{2}:\d{2}/)) {
+        return false;
+    }
+    const prueba = parsearFechaHora(fecha, hora);
+    return prueba !== null && !Number.isNaN(prueba.getTime());
+}
+
+function obtenerFechaHoraRegistro(fechaCliente, horaCliente) {
+    if (esFechaHoraAsistenciaValida(fechaCliente, horaCliente)) {
+        return { fecha: fechaCliente.trim(), hora: horaCliente.trim() };
+    }
+    const ahora = new Date();
+    const fecha = ahora.toLocaleDateString('es-MX', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+    });
+    const hora = ahora.toLocaleTimeString('es-MX', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true
+    });
+    return { fecha, hora };
+}
+
 // Función para calcular tiempo trabajado entre entrada y salida
 function calcularTiempoTrabajado(fechaEntrada, horaEntrada, fechaSalida, horaSalida) {
     try {
@@ -238,7 +278,7 @@ function cerrarJornadasAutomaticamente(db, empleadoId = null) {
 
 // Registrar asistencia (empleado escanea QR)
 router.post('/registrar', async (req, res) => {
-    const { codigo, movimiento, turno, foto } = req.body;
+    const { codigo, movimiento, turno, foto, fecha: fechaCliente, hora: horaCliente } = req.body;
     const db = getDB();
 
     // Validar datos requeridos
@@ -265,19 +305,9 @@ router.post('/registrar', async (req, res) => {
         });
     }
 
-    // Obtener fecha y hora actual
-    const ahora = new Date();
-    const fecha = ahora.toLocaleDateString('es-MX', { 
-        day: '2-digit', 
-        month: '2-digit', 
-        year: 'numeric' 
-    });
-    const hora = ahora.toLocaleTimeString('es-MX', { 
-        hour: '2-digit', 
-        minute: '2-digit', 
-        second: '2-digit',
-        hour12: true 
-    });
+    // Fecha/hora: preferir lo que muestra el dispositivo (tablet) para que coincida con la pantalla;
+    // si no viene o es inválido, usar hora del servidor (TZ en server.js, ej. America/Mexico_City).
+    const { fecha, hora } = obtenerFechaHoraRegistro(fechaCliente, horaCliente);
 
     // Buscar empleado por código
     db.get('SELECT id, nombre, apellido FROM empleados WHERE codigo = ? AND activo = 1', 
