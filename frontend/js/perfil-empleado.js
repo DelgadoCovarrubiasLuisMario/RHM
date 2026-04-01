@@ -163,24 +163,25 @@ function seleccionarEmpleado(codigo, nombre) {
     cerrarEscanner();
 }
 
-function cerrarEscanner() {
+async function cerrarEscanner() {
     const qrReaderContainer = document.getElementById('qr-reader');
     if (!qrReaderContainer) return;
 
     if (html5QrcodeScanner) {
-        html5QrcodeScanner.stop().then(() => {
-            try {
-                html5QrcodeScanner.clear();
-            } catch (_) {}
-            html5QrcodeScanner = null;
-            qrReaderContainer.style.display = 'none';
-        }).catch(() => {
-            html5QrcodeScanner = null;
-            qrReaderContainer.style.display = 'none';
-        });
-    } else {
-        qrReaderContainer.style.display = 'none';
+        const scanner = html5QrcodeScanner;
+        html5QrcodeScanner = null;
+        try {
+            await scanner.stop();
+        } catch (_) {
+            // Puede fallar si ya no estaba corriendo; se ignora.
+        }
+        try {
+            scanner.clear();
+        } catch (_) {
+            // Ignorar errores de clear en estados intermedios.
+        }
     }
+    qrReaderContainer.style.display = 'none';
 }
 
 // Escáner QR robusto con fallback de cámara
@@ -200,6 +201,10 @@ function activarEscanner() {
     const config = { fps: 10, qrbox: { width: size, height: size }, aspectRatio: 1.0 };
 
     const onSuccess = (decodedText) => {
+        if (!codigoInput) {
+            cerrarEscanner();
+            return;
+        }
         codigoInput.value = decodedText;
         const lista = document.getElementById('listaEmpleados');
         if (lista) lista.style.display = 'none';
