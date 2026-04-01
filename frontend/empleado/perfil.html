@@ -42,10 +42,13 @@
                     <div class="form-group">
                         <label for="codigo">Código o nombre *</label>
                         <div class="input-with-icon">
-                            <input type="text" id="codigo" placeholder="Buscar por nombre o código" required autocomplete="off">
+                            <input type="text" id="codigo" placeholder="Buscar por nombre/código o escanear QR" required autocomplete="off">
+                            <button type="button" class="btn-qr" id="btnEscanearQR" onclick="activarEscanner()" title="Escanear código QR">
+                                <span class="qr-icon">📷</span>
+                            </button>
                         </div>
                         <div id="listaEmpleados" class="lista-empleados" style="display: none;"></div>
-                        <small class="help-text">Escribe y elige de la lista (sin escáner QR).</small>
+                        <div id="qr-reader" class="qr-reader-container" style="display: none;"></div>
                     </div>
 
                     <!-- Movimiento -->
@@ -97,6 +100,7 @@
     <!-- Scripts -->
     <script src="../js/theme.js"></script>
     <script src="../js/config.js"></script>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <script src="../js/perfil-empleado.js"></script>
 </body>
 </html>

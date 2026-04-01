@@ -38,14 +38,18 @@
                     </div>
                 </div>
 
-                <!-- Código o nombre (sin QR: evita conflictos de cámara) -->
+                <!-- Código o nombre -->
                 <div class="form-group">
                     <label for="codigo">Código o Nombre *</label>
                     <div class="input-with-icon">
-                        <input type="text" id="codigo" placeholder="Buscar por nombre o código" required autocomplete="off" autofocus>
+                        <input type="text" id="codigo" placeholder="Buscar por nombre/código o escanear QR" required autocomplete="off" autofocus>
+                        <button type="button" class="btn-qr" id="btnEscanearQR" onclick="activarEscanner()" title="Escanear código QR">
+                            <span class="qr-icon">📷</span>
+                        </button>
                     </div>
                     <div id="listaEmpleados" class="lista-empleados" style="display: none;"></div>
-                    <small class="help-text">Escribe el nombre o el código del empleado y elígelo de la lista</small>
+                    <div id="qr-reader" class="qr-reader-container" style="display: none;"></div>
+                    <small class="help-text">Puedes buscar por texto o escanear el QR.</small>
                 </div>
 
                 <!-- Movimiento -->
@@ -98,6 +102,7 @@
     <!-- Configuración de API -->
     <script src="../js/theme.js"></script>
     <script src="../js/config.js"></script>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <script src="../js/registro-asistencia.js"></script>
 </body>
 </html>

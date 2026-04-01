@@ -20,20 +20,38 @@ document.addEventListener('DOMContentLoaded', function() {
     // Manejo del formulario de admin
     const adminForm = document.getElementById('adminForm');
     if (adminForm) {
-        adminForm.addEventListener('submit', function(e) {
+        adminForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             const usuario = document.getElementById('adminUsuario').value;
             const password = document.getElementById('adminPassword').value;
+            if (!usuario || !password) {
+                alert('Por favor completa todos los campos');
+                return;
+            }
 
-            // Por ahora, login simple (después agregaremos autenticación real)
-            // TODO: Implementar autenticación con backend
-            if (usuario && password) {
+            try {
+                const apiURL = window.API_CONFIG ? window.API_CONFIG.getBaseURL() : 'http://localhost:3000';
+                const response = await fetch(`${apiURL}/api/auth/admin/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ usuario, password })
+                });
+                const data = await response.json();
+
+                if (!data.success || !data.token) {
+                    alert(`❌ ${data.message || 'Credenciales inválidas'}`);
+                    return;
+                }
+
                 localStorage.setItem('tipoUsuario', 'admin');
                 localStorage.setItem('usuario', usuario);
-                // Ya no necesitamos seleccionar área, todas las páginas muestran ambas áreas
+                localStorage.setItem('adminToken', data.token);
                 window.location.href = 'admin/menu.html';
-            } else {
-                alert('Por favor completa todos los campos');
+            } catch (error) {
+                console.error('Error en login admin:', error);
+                alert('❌ No se pudo iniciar sesión. Verifica conexión con el servidor.');
             }
         });
     }

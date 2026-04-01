@@ -108,7 +108,7 @@
     </div>
 
     <script src="../js/theme.js"></script>
-    <script src="../js/config.js"></script>
+    <script src="../js/config.js"></script>`n    <script src="../js/admin-auth.js"></script>
     <script>
         // Cargar notificaciones de cortes automáticos al iniciar
         document.addEventListener('DOMContentLoaded', function() {
@@ -204,6 +204,7 @@
 
         // Volver al login
         function volver() {
+            localStorage.removeItem('adminToken');
             localStorage.removeItem('tipoUsuario');
             localStorage.removeItem('usuario');
             window.location.href = '../index.html';

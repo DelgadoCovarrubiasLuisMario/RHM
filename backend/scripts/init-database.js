@@ -31,17 +31,18 @@ function initData() {
 
         if (row.count === 0) {
             // Insertar admin por defecto
+            const defaultAdminPassword = 'RhmAdmin!2026#';
             db.run(
                 `INSERT INTO administradores (usuario, password, nombre) 
                  VALUES (?, ?, ?)`,
-                ['admin', 'admin123', 'Administrador'],
+                ['admin', defaultAdminPassword, 'Administrador'],
                 function(err) {
                     if (err) {
                         console.error('Error al insertar administrador:', err);
                     } else {
                         console.log('✅ Administrador creado:');
                         console.log('   Usuario: admin');
-                        console.log('   Contraseña: admin123');
+                        console.log(`   Contraseña: ${defaultAdminPassword}`);
                     }
                     checkEmployees();
                 }
