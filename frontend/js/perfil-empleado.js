@@ -2,6 +2,8 @@
 let movimientoSeleccionado = null;
 let turnoSeleccionado = null;
 let todosLosEmpleados = [];
+let stream = null;
+let videoElement = null;
 
 // Inicializar página
 document.addEventListener('DOMContentLoaded', function() {
@@ -187,6 +189,113 @@ function seleccionarTurno(turno) {
     });
 }
 
+function esContextoSeguroParaCamara() {
+    const host = window.location.hostname;
+    const esLocalhost = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+    return window.isSecureContext || esLocalhost;
+}
+
+async function solicitarStreamCamara() {
+    const intentos = [
+        { video: { facingMode: { ideal: 'user' }, width: { ideal: 640 }, height: { ideal: 480 } }, audio: false },
+        { video: { facingMode: 'user' }, audio: false },
+        { video: true, audio: false }
+    ];
+
+    let ultimoError = null;
+    for (const constraints of intentos) {
+        try {
+            return await navigator.mediaDevices.getUserMedia(constraints);
+        } catch (error) {
+            ultimoError = error;
+            console.warn('Intento de cámara fallido con constraints:', constraints, error);
+        }
+    }
+
+    throw ultimoError || new Error('No fue posible obtener stream de cámara');
+}
+
+function esperarVideoListo(video) {
+    return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Timeout cargando video')), 3000);
+
+        video.onloadedmetadata = () => {
+            clearTimeout(timeout);
+            resolve();
+        };
+
+        video.onerror = (err) => {
+            clearTimeout(timeout);
+            reject(err || new Error('Error en video'));
+        };
+    });
+}
+
+async function capturarFoto() {
+    const movimiento = document.getElementById('movimiento').value;
+    if (movimiento !== 'ENTRADA' && movimiento !== 'INGRESO') {
+        return null;
+    }
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        return null;
+    }
+
+    if (!esContextoSeguroParaCamara()) {
+        mostrarMensaje('La cámara requiere HTTPS. Abre la app con https:// para capturar foto.', 'error');
+        return null;
+    }
+
+    try {
+        videoElement = document.createElement('video');
+        videoElement.style.position = 'fixed';
+        videoElement.style.top = '-9999px';
+        videoElement.style.width = '320px';
+        videoElement.style.height = '240px';
+        videoElement.autoplay = true;
+        videoElement.playsInline = true;
+        videoElement.setAttribute('playsinline', 'true');
+        videoElement.muted = true;
+        document.body.appendChild(videoElement);
+
+        stream = await solicitarStreamCamara();
+        videoElement.srcObject = stream;
+
+        await esperarVideoListo(videoElement);
+        await videoElement.play();
+        await new Promise(requestAnimationFrame);
+
+        const canvas = document.createElement('canvas');
+        canvas.width = videoElement.videoWidth || 640;
+        canvas.height = videoElement.videoHeight || 480;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+
+        const fotoBase64 = canvas.toDataURL('image/jpeg', 0.8);
+        detenerCamara();
+        return fotoBase64;
+    } catch (error) {
+        console.error('Error al capturar foto:', error);
+        detenerCamara();
+        mostrarMensaje('No se pudo tomar foto en este dispositivo. El registro se guardará sin foto.', 'error');
+        return null;
+    }
+}
+
+function detenerCamara() {
+    if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+    }
+    if (videoElement) {
+        videoElement.srcObject = null;
+        if (videoElement.parentNode) {
+            videoElement.parentNode.removeChild(videoElement);
+        }
+        videoElement = null;
+    }
+}
+
 // Manejar envío del formulario
 document.getElementById('registroForm').addEventListener('submit', async function(e) {
     e.preventDefault();
@@ -207,6 +316,13 @@ document.getElementById('registroForm').addEventListener('submit', async functio
     submitBtn.textContent = 'Registrando...';
 
     try {
+        let fotoBase64 = null;
+        try {
+            fotoBase64 = await capturarFoto();
+        } catch (error) {
+            console.error('Error al capturar foto:', error);
+        }
+
         const apiURL = window.API_CONFIG ? window.API_CONFIG.getBaseURL() : 'http://localhost:3000';
         
         // Registrar asistencia sin área
@@ -220,7 +336,8 @@ document.getElementById('registroForm').addEventListener('submit', async functio
                 movimiento,
                 turno: parseInt(turno, 10),
                 fecha: document.getElementById('fecha').value,
-                hora: document.getElementById('hora').value
+                hora: document.getElementById('hora').value,
+                foto: fotoBase64
             })
         });
         
@@ -250,6 +367,7 @@ function limpiarFormulario() {
     document.getElementById('registroForm').reset();
     movimientoSeleccionado = null;
     turnoSeleccionado = null;
+    detenerCamara();
     document.querySelectorAll('.movimiento-btn, .turno-btn').forEach(btn => {
         btn.classList.remove('active');
     });
