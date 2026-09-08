@@ -6,7 +6,9 @@ const assert = require('assert');
 const {
     parsearFechaHora,
     encontrarEntradasAbiertas,
-    calcularTiempoTrabajado
+    calcularTiempoTrabajado,
+    redondearABloques15Minutos,
+    formatearHorasDecimales
 } = require('../routes/asistencia')._test;
 
 function ok(name) {
@@ -87,7 +89,34 @@ function ok(name) {
         '04:30:00 p.m.'
     );
     assert.strictEqual(t, '9h 30m');
-    ok('calcularTiempoTrabajado 9h 30m');
+    ok('calcularTiempoTrabajado 9h 30m (ya en bloque 15)');
+}
+
+{
+    // 9h37 → 577 min; más cerca de 570 (9h30) que de 585 (9h45)
+    assert.strictEqual(redondearABloques15Minutos(9 + 37 / 60), 9.5);
+    assert.strictEqual(formatearHorasDecimales(9.5), '9h 30m');
+    // 9h40 → redondea a 9h45
+    assert.strictEqual(redondearABloques15Minutos(9 + 40 / 60), 9.75);
+    const t = calcularTiempoTrabajado(
+        '07/09/2026',
+        '07:00:00 a.m.',
+        '07/09/2026',
+        '04:40:00 p.m.'
+    );
+    assert.strictEqual(t, '9h 45m');
+    ok('redondeo a bloques de 15 min (nómina)');
+}
+
+{
+    const t = calcularTiempoTrabajado(
+        '07/09/2026',
+        '07:00:00 a.m.',
+        '07/09/2026',
+        '07:02:00 a.m.'
+    );
+    assert.strictEqual(t, '15m');
+    ok('mínimo 15 minutos si hubo tiempo > 0');
 }
 
 console.log('\nTodos los tests de jornada OK');

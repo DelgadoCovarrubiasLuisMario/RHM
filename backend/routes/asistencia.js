@@ -130,6 +130,27 @@ function encontrarEntradasAbiertas(registros) {
     return abiertas;
 }
 
+/** Misma regla que nómina (sueldos.js): bloques de 15 min al más cercano; mínimo 15 min. */
+function redondearABloques15Minutos(horasDecimales) {
+    if (horasDecimales <= 0) return 0;
+    const minutosTotales = horasDecimales * 60;
+    const bloques15Min = Math.round(minutosTotales / 15);
+    if (bloques15Min === 0 && horasDecimales > 0) {
+        return 0.25;
+    }
+    return (bloques15Min * 15) / 60;
+}
+
+function formatearHorasDecimales(horasDecimales) {
+    if (horasDecimales <= 0) return null;
+    const minutosTotales = Math.round(horasDecimales * 60);
+    const horas = Math.floor(minutosTotales / 60);
+    const minutos = minutosTotales % 60;
+    if (horas > 0 && minutos > 0) return `${horas}h ${minutos}m`;
+    if (horas > 0) return `${horas}h`;
+    return `${minutos}m`;
+}
+
 function calcularTiempoTrabajado(fechaEntrada, horaEntrada, fechaSalida, horaSalida) {
     try {
         const fechaHoraEntrada = parsearFechaHora(fechaEntrada, horaEntrada);
@@ -144,20 +165,9 @@ function calcularTiempoTrabajado(fechaEntrada, horaEntrada, fechaSalida, horaSal
             return null;
         }
 
-        const horas = Math.floor(diferenciaMs / (1000 * 60 * 60));
-        const minutos = Math.floor((diferenciaMs % (1000 * 60 * 60)) / (1000 * 60));
-        const segundos = Math.floor((diferenciaMs % (1000 * 60)) / 1000);
-
-        if (horas > 0) {
-            if (minutos > 0) {
-                return `${horas}h ${minutos}m`;
-            }
-            return `${horas}h`;
-        }
-        if (minutos > 0) {
-            return `${minutos}m`;
-        }
-        return `${segundos}s`;
+        const horasExactas = diferenciaMs / (1000 * 60 * 60);
+        const horasRedondeadas = redondearABloques15Minutos(horasExactas);
+        return formatearHorasDecimales(horasRedondeadas);
     } catch (error) {
         console.error('Error al calcular tiempo trabajado:', error);
         return null;
@@ -284,6 +294,17 @@ router.post('/registrar', async (req, res) => {
     }
 
     const { fecha, hora } = obtenerFechaHoraRegistro(fechaCliente, horaCliente);
+
+    // Foto obligatoria en entrada y salida (fail-closed)
+    if (esEntrada(movimiento) || movimiento === 'SALIDA') {
+        if (!foto || typeof foto !== 'string' || foto.length < 100) {
+            return responderError(
+                res,
+                400,
+                'La foto es obligatoria para registrar entrada y salida.'
+            );
+        }
+    }
 
     let empleado;
     try {
@@ -623,5 +644,7 @@ module.exports._test = {
     timestampRegistro,
     encontrarEntradasAbiertas,
     compararRegistrosCronologicos,
-    calcularTiempoTrabajado
+    calcularTiempoTrabajado,
+    redondearABloques15Minutos,
+    formatearHorasDecimales
 };

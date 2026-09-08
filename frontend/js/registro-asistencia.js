@@ -225,9 +225,9 @@ async function solicitarStreamCamara() {
     throw ultimoError || new Error('No fue posible obtener stream de cámara');
 }
 
-// Foto solo en ingreso: SALIDA no debe bloquearse por cámara (HTTPS/permisos).
+// Foto obligatoria en ingreso y salida.
 function esMovimientoConFoto(movimiento) {
-    return movimiento === 'ENTRADA' || movimiento === 'INGRESO';
+    return movimiento === 'ENTRADA' || movimiento === 'INGRESO' || movimiento === 'SALIDA';
 }
 
 /**
@@ -329,7 +329,7 @@ async function capturarFotoConStreamPendiente(promesaStream) {
     try {
         const mediaStream = await promesaStream;
         if (!mediaStream) {
-            mostrarMensaje('⚠️ No se pudo tomar foto (permiso de cámara o dispositivo). El registro se guardará sin foto.', 'error');
+            mostrarMensaje('⚠️ No se pudo tomar foto (permiso de cámara o dispositivo). La foto es obligatoria.', 'error');
             return null;
         }
         stream = mediaStream;
@@ -364,7 +364,7 @@ async function capturarFotoConStreamPendiente(promesaStream) {
     } catch (error) {
         console.error('❌ Error al capturar foto:', error);
         detenerCamara();
-        mostrarMensaje('⚠️ No se pudo tomar foto en este dispositivo. El registro se guardará sin foto.', 'error');
+        mostrarMensaje('⚠️ No se pudo tomar foto en este dispositivo. La foto es obligatoria.', 'error');
         return null;
     }
 }
@@ -432,6 +432,11 @@ document.getElementById('registroForm').addEventListener('submit', async functio
             fotoBase64 = await capturarFotoConStreamPendiente(promesaStreamCamara);
         } catch (error) {
             console.error('Error al capturar foto:', error);
+        }
+
+        if (!fotoBase64 || fotoBase64.length < 100) {
+            mostrarMensaje('❌ La foto es obligatoria para registrar ingreso y salida. Usa HTTPS y permite la cámara.', 'error');
+            return;
         }
 
         const apiURL = window.API_CONFIG ? window.API_CONFIG.getBaseURL() : 'http://localhost:3000';
