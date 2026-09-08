@@ -10,6 +10,9 @@ database/*.db-journal
 .env
 .env.local
 
+# Certificados HTTPS autofirmados (se generan al arrancar)
+certs/
+
 # Logs
 *.log
 npm-debug.log*

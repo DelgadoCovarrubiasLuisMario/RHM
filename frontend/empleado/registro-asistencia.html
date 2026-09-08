@@ -18,6 +18,9 @@
                 </div>
             </div>
 
+            <!-- Aviso si la cámara no puede usarse (HTTP en producción) -->
+            <div id="avisoCamara" class="mensaje mensaje-error" style="display: none; margin-bottom: 16px;"></div>
+
             <!-- Formulario de registro -->
             <form id="registroForm" class="attendance-form">
                 <!-- Fecha -->
@@ -59,7 +62,7 @@
                             SALIDA
                         </button>
                     </div>
-                    <input type="hidden" id="movimiento" required>
+                    <input type="hidden" id="movimiento">
                 </div>
 
                 <!-- Turno -->
@@ -80,7 +83,7 @@
                         </button>
                     </div>
                     <small class="help-text">Turno Planta: si la salida está entre 4:30 y 6:00 p. m., en el cálculo de sueldo se agregan 1.5 h extra.</small>
-                    <input type="hidden" id="turno" required>
+                    <input type="hidden" id="turno">
                 </div>
 
                 <!-- Botones de acción -->

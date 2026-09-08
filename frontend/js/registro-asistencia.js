@@ -4,11 +4,15 @@ let turnoSeleccionado = null;
 let todosLosEmpleados = [];
 let stream = null;
 let videoElement = null;
+let registrando = false;
 
 // Inicializar página
 document.addEventListener('DOMContentLoaded', function() {
     // Cargar empleados para la búsqueda
     cargarEmpleados();
+
+    // Aviso fijo si no hay HTTPS (causa típica en despliegue con http://IP)
+    avisarSiCamaraNoDisponible();
 
     // Actualizar fecha y hora cada segundo
     actualizarFechaHora();
@@ -36,6 +40,28 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 });
+
+function avisarSiCamaraNoDisponible() {
+    const aviso = document.getElementById('avisoCamara');
+    if (!aviso) return;
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        aviso.textContent = '⚠️ Este navegador no permite usar la cámara. El ingreso se guardará sin foto.';
+        aviso.style.display = 'block';
+        return;
+    }
+
+    if (!esContextoSeguroParaCamara()) {
+        const host = window.location.hostname;
+        const puerto = window.location.port || '3000';
+        aviso.innerHTML =
+            '⚠️ <strong>La cámara está bloqueada porque abriste con HTTP.</strong><br>' +
+            `Abre en la tablet: <strong>https://${host}:${puerto}</strong><br>` +
+            'Acepta el aviso de certificado (“Avanzado → Continuar / Aceptar el riesgo”). ' +
+            'No hace falta dominio: es HTTPS local autofirmado. Sin eso el navegador no muestra ni el permiso de cámara.';
+        aviso.style.display = 'block';
+    }
+}
 
 // Cargar empleados para búsqueda
 async function cargarEmpleados() {
@@ -199,6 +225,7 @@ async function solicitarStreamCamara() {
     throw ultimoError || new Error('No fue posible obtener stream de cámara');
 }
 
+// Foto solo en ingreso: SALIDA no debe bloquearse por cámara (HTTPS/permisos).
 function esMovimientoConFoto(movimiento) {
     return movimiento === 'ENTRADA' || movimiento === 'INGRESO';
 }
@@ -316,14 +343,19 @@ async function capturarFotoConStreamPendiente(promesaStream) {
             });
         }
         await new Promise(requestAnimationFrame);
+        // Reducir tamaño para no saturar el POST JSON (base64 crece ~33%)
+        const maxAncho = 480;
+        const srcW = video.videoWidth || 640;
+        const srcH = video.videoHeight || 480;
+        const escala = srcW > maxAncho ? maxAncho / srcW : 1;
+        const w = Math.round(srcW * escala);
+        const h = Math.round(srcH * escala);
         const canvas = document.createElement('canvas');
-        const w = video.videoWidth || 640;
-        const h = video.videoHeight || 480;
         canvas.width = w;
         canvas.height = h;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(video, 0, 0, w, h);
-        const fotoBase64 = canvas.toDataURL('image/jpeg', 0.8);
+        const fotoBase64 = canvas.toDataURL('image/jpeg', 0.7);
         detenerCamara();
         if (fotoBase64 && fotoBase64.length > 100) {
             console.log('✅ Foto capturada correctamente, tamaño:', fotoBase64.length);
@@ -356,43 +388,52 @@ function detenerCamara() {
 document.getElementById('registroForm').addEventListener('submit', async function(e) {
     e.preventDefault();
 
-    const codigo = document.getElementById('codigo').value;
-    const movimiento = document.getElementById('movimiento').value;
-    const turno = document.getElementById('turno').value;
-    // Área ya no se usa
-
-    // Validar campos
-    if (!codigo || !movimiento || !turno) {
-        mostrarMensaje('Por favor completa todos los campos requeridos', 'error');
+    if (registrando) {
         return;
     }
+
+    const codigo = document.getElementById('codigo').value.trim();
+    const movimiento = document.getElementById('movimiento').value;
+    const turno = document.getElementById('turno').value;
+
+    if (!codigo) {
+        mostrarMensaje('Escribe o selecciona el código/nombre del empleado', 'error');
+        return;
+    }
+    if (!movimiento) {
+        mostrarMensaje('Selecciona INGRESO o SALIDA', 'error');
+        return;
+    }
+    if (!turno) {
+        mostrarMensaje('Selecciona el turno', 'error');
+        return;
+    }
+
+    registrando = true;
+    const submitBtn = this.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Guardando...';
 
     // IMPORTANT: iniciar cámara aquí, antes de cualquier await (fetch, confirm, etc.),
     // o Chrome móvil/tablet pierde el "user gesture" y bloquea getUserMedia.
     const promesaStreamCamara = iniciarPromesaStreamEntrada();
 
-    // Verificar fechas de cursos/inducciones antes de registrar
-    const puedeContinuar = await verificarFechasCursos(codigo);
-    if (!puedeContinuar) {
-        promesaStreamCamara
-            .then((s) => detenerStreamSiExiste(s))
-            .catch(() => {});
-        return; // El usuario canceló o hay un error
-    }
-
-    // Deshabilitar botón mientras se procesa
-    const submitBtn = this.querySelector('button[type="submit"]');
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Guardando...';
-
-    let fotoBase64 = null;
     try {
-        fotoBase64 = await capturarFotoConStreamPendiente(promesaStreamCamara);
-    } catch (error) {
-        console.error('Error al capturar foto:', error);
-    }
+        const puedeContinuar = await verificarFechasCursos(codigo);
+        if (!puedeContinuar) {
+            promesaStreamCamara
+                .then((s) => detenerStreamSiExiste(s))
+                .catch(() => {});
+            return;
+        }
 
-    try {
+        let fotoBase64 = null;
+        try {
+            fotoBase64 = await capturarFotoConStreamPendiente(promesaStreamCamara);
+        } catch (error) {
+            console.error('Error al capturar foto:', error);
+        }
+
         const apiURL = window.API_CONFIG ? window.API_CONFIG.getBaseURL() : 'http://localhost:3000';
         const response = await fetch(`${apiURL}/api/asistencia/registrar`, {
             method: 'POST',
@@ -402,7 +443,7 @@ document.getElementById('registroForm').addEventListener('submit', async functio
             body: JSON.stringify({
                 codigo,
                 movimiento,
-                turno: parseInt(turno),
+                turno: parseInt(turno, 10),
                 foto: fotoBase64,
                 fecha: document.getElementById('fecha').value,
                 hora: document.getElementById('hora').value
@@ -413,9 +454,8 @@ document.getElementById('registroForm').addEventListener('submit', async functio
 
         if (data.success) {
             let mensaje = '';
-            
-            // Si hay tiempo trabajado (es una salida), mostrarlo destacado
-            if (data.data.tiempoTrabajado) {
+
+            if (data.data && data.data.tiempoTrabajado) {
                 mensaje = `<div style="margin-bottom: 10px;">
                     ✅ ${data.data.movimiento} registrada - ${data.data.empleado}
                 </div>
@@ -423,22 +463,17 @@ document.getElementById('registroForm').addEventListener('submit', async functio
                     ⏱️ Tiempo trabajado: <strong style="font-size: 1.1em;">${data.data.tiempoTrabajado}</strong>
                 </div>`;
             } else {
-                mensaje = `✅ ${data.message} - ${data.data.empleado}`;
+                mensaje = `✅ ${data.message} - ${data.data ? data.data.empleado : ''}`;
             }
-            
+
             mostrarMensaje(mensaje, 'success');
-            // Limpiar formulario
-            document.getElementById('registroForm').reset();
-            movimientoSeleccionado = null;
-            turnoSeleccionado = null;
-            document.querySelectorAll('.movimiento-btn, .turno-btn').forEach(btn => {
-                btn.classList.remove('active');
-            });
-            
-            // Limpiar código después de 5 segundos (más tiempo si hay tiempo trabajado)
+            document.getElementById('codigo').value = '';
+            document.getElementById('listaEmpleados').style.display = 'none';
+            // Mantener movimiento/turno seleccionados para el siguiente empleado del mismo tipo
             setTimeout(() => {
-                document.getElementById('codigo').value = '';
-            }, data.data.tiempoTrabajado ? 5000 : 3000);
+                const codigoInput = document.getElementById('codigo');
+                if (codigoInput) codigoInput.focus();
+            }, 200);
         } else {
             mostrarMensaje(`❌ ${data.message}`, 'error');
         }
@@ -446,6 +481,7 @@ document.getElementById('registroForm').addEventListener('submit', async functio
         console.error('Error:', error);
         mostrarMensaje('❌ Error de conexión. Verifica que el servidor esté corriendo.', 'error');
     } finally {
+        registrando = false;
         submitBtn.disabled = false;
         submitBtn.textContent = 'Guardar';
     }

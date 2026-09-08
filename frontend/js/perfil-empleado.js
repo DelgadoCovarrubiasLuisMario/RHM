@@ -4,6 +4,7 @@ let turnoSeleccionado = null;
 let todosLosEmpleados = [];
 let stream = null;
 let videoElement = null;
+let registrando = false;
 
 // Inicializar página
 document.addEventListener('DOMContentLoaded', function() {
@@ -361,20 +362,22 @@ function detenerCamara() {
 document.getElementById('registroForm').addEventListener('submit', async function(e) {
     e.preventDefault();
 
-    const codigo = document.getElementById('codigo').value;
+    if (registrando) {
+        return;
+    }
+
+    const codigo = document.getElementById('codigo').value.trim();
     const movimiento = document.getElementById('movimiento').value;
     const turno = document.getElementById('turno').value;
     
-    // Validar campos
     if (!codigo || !movimiento || !turno) {
         mostrarMensaje('Por favor completa todos los campos requeridos', 'error');
         return;
     }
 
-    // Iniciar cámara en el mismo gesto que el envío (Chrome móvil / tablet)
+    registrando = true;
     const promesaStreamCamara = iniciarPromesaStreamEntrada();
 
-    // Deshabilitar botón mientras se procesa
     const submitBtn = this.querySelector('button[type="submit"]');
     submitBtn.disabled = true;
     submitBtn.textContent = 'Registrando...';
@@ -389,7 +392,6 @@ document.getElementById('registroForm').addEventListener('submit', async functio
 
         const apiURL = window.API_CONFIG ? window.API_CONFIG.getBaseURL() : 'http://localhost:3000';
         
-        // Registrar asistencia sin área
         const response = await fetch(`${apiURL}/api/asistencia/registrar`, {
             method: 'POST',
             headers: {
@@ -410,7 +412,6 @@ document.getElementById('registroForm').addEventListener('submit', async functio
         if (data.success) {
             mostrarMensaje(`✅ ${data.message} - ${data.data.empleado}`, 'success');
             
-            // Limpiar formulario después de 2 segundos
             setTimeout(() => {
                 limpiarFormulario();
             }, 2000);
@@ -421,6 +422,7 @@ document.getElementById('registroForm').addEventListener('submit', async functio
         console.error('Error:', error);
         mostrarMensaje('❌ Error de conexión. Verifica que el servidor esté corriendo.', 'error');
     } finally {
+        registrando = false;
         submitBtn.disabled = false;
         submitBtn.textContent = 'Aceptar';
     }

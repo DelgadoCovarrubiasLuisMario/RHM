@@ -7,15 +7,23 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const path = require('path');
+const http = require('http');
+const https = require('https');
 const { initDatabase, getDB, migrateAsistenciaTurno4 } = require('./database/db');
+const { obtenerCredencialesHttps, listarIpsLan } = require('./https-cert');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+// Por defecto HTTPS ON: en tablets/LAN la cámara exige contexto seguro (https://IP).
+// Desactivar: USE_HTTPS=0
+const USE_HTTPS = process.env.USE_HTTPS !== '0';
+const HTTP_REDIRECT_PORT = parseInt(process.env.HTTP_REDIRECT_PORT || '3080', 10);
 
 // Middlewares
+// Límite alto: la foto de entrada va en JSON como data URL (base64) y supera el default de 100kb.
 app.use(cors());
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json({ limit: '5mb' }));
+app.use(bodyParser.urlencoded({ extended: true, limit: '5mb' }));
 
 // Servir archivos estáticos del frontend
 app.use(express.static(path.join(__dirname, '../frontend')));
@@ -194,25 +202,68 @@ function cerrarJornadasPendientes() {
     }
 }
 
-// Iniciar servidor
-app.listen(PORT, () => {
-    console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
-    console.log(`📱 Listo para usar en tablets y navegadores`);
-    
-    // Ejecutar limpieza al iniciar
+function iniciarTareasPeriodicas() {
     setTimeout(() => {
         limpiarRegistrosAntiguos();
-        cerrarJornadasPendientes(); // Cerrar jornadas pendientes al iniciar
-    }, 5000); // Esperar 5 segundos para que la BD esté lista
-    
-    // Ejecutar limpieza diariamente (cada 24 horas)
+        cerrarJornadasPendientes();
+    }, 5000);
+
     setInterval(() => {
         limpiarRegistrosAntiguos();
-    }, 24 * 60 * 60 * 1000); // 24 horas en milisegundos
-    
-    // Cerrar jornadas automáticamente cada hora
+    }, 24 * 60 * 60 * 1000);
+
     setInterval(() => {
         cerrarJornadasPendientes();
-    }, 60 * 60 * 1000); // 1 hora en milisegundos
-});
+    }, 60 * 60 * 1000);
+}
+
+function imprimirUrlsAcceso(protocolo, puerto) {
+    const ips = listarIpsLan().filter((ip) => ip !== '127.0.0.1');
+    console.log(`🚀 Servidor ${protocolo.toUpperCase()} en puerto ${puerto}`);
+    console.log(`   Local: ${protocolo}://localhost:${puerto}`);
+    ips.forEach((ip) => {
+        console.log(`   LAN:   ${protocolo}://${ip}:${puerto}`);
+    });
+}
+
+// Iniciar servidor (HTTPS autofirmado para cámara en tablets sin dominio)
+if (USE_HTTPS) {
+    let credenciales;
+    try {
+        credenciales = obtenerCredencialesHttps();
+    } catch (error) {
+        console.error('❌ No se pudo crear/cargar certificado HTTPS:', error.message);
+        console.error('   Arrancando solo HTTP (la cámara NO funcionará en tablets por IP).');
+        http.createServer(app).listen(PORT, '0.0.0.0', () => {
+            imprimirUrlsAcceso('http', PORT);
+            iniciarTareasPeriodicas();
+        });
+    }
+
+    if (credenciales) {
+        https.createServer(credenciales, app).listen(PORT, '0.0.0.0', () => {
+            imprimirUrlsAcceso('https', PORT);
+            console.log('📱 Cámara: abre con https:// (no http://)');
+            console.log('⚠️  Certificado autofirmado: en cada tablet acepta "Avanzado → Continuar".');
+            iniciarTareasPeriodicas();
+        });
+
+        // HTTP auxiliar: redirige a HTTPS para no confundir con el enlace viejo
+        http.createServer((req, res) => {
+            const hostHeader = req.headers.host || `localhost:${HTTP_REDIRECT_PORT}`;
+            const hostname = hostHeader.replace(/:\d+$/, '');
+            const location = `https://${hostname}:${PORT}${req.url || '/'}`;
+            res.writeHead(302, { Location: location });
+            res.end();
+        }).listen(HTTP_REDIRECT_PORT, '0.0.0.0', () => {
+            console.log(`↪️  HTTP :${HTTP_REDIRECT_PORT} redirige a HTTPS :${PORT}`);
+        });
+    }
+} else {
+    http.createServer(app).listen(PORT, '0.0.0.0', () => {
+        imprimirUrlsAcceso('http', PORT);
+        console.log('⚠️  USE_HTTPS=0: sin HTTPS la cámara no funciona fuera de localhost.');
+        iniciarTareasPeriodicas();
+    });
+}
 

@@ -49,9 +49,10 @@ mkdir -p database
 echo "🔧 Inicializando base de datos..."
 npm run init-db
 
-# Configurar firewall
+# Configurar firewall (HTTPS cámara + redirect HTTP)
 echo "🔥 Configurando firewall..."
 ufw allow 3000/tcp
+ufw allow 3080/tcp
 ufw --force enable
 
 # Iniciar o reiniciar aplicación con PM2
@@ -59,13 +60,17 @@ echo "🚀 Iniciando aplicación..."
 if pm2 list | grep -q "rhm-app"; then
     pm2 restart rhm-app
 else
+    # USE_HTTPS=1 (default): tablets pueden usar cámara sin dominio
     pm2 start backend/server.js --name rhm-app
     pm2 startup
     pm2 save
 fi
 
+PUBLIC_IP=$(curl -s ifconfig.me || echo "TU_IP")
 echo "✅ Despliegue completado!"
 echo "📊 Ver estado: pm2 status"
 echo "📋 Ver logs: pm2 logs rhm-app"
-echo "🌐 Acceder a: http://$(curl -s ifconfig.me):3000"
+echo "🌐 Abrir en tablets (cámara): https://${PUBLIC_IP}:3000"
+echo "↪️  Si abres http://${PUBLIC_IP}:3080 te redirige a HTTPS"
+echo "⚠️  En cada tablet: aceptar certificado autofirmado (Avanzado → Continuar)"
 
