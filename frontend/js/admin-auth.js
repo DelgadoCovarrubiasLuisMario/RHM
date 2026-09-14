@@ -27,6 +27,22 @@ async function verificarSesionAdmin() {
     }
 }
 
+(function envolverFetchAdmin() {
+    if (window.__rhmFetchConToken) return;
+    window.__rhmFetchConToken = true;
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = function (url, options) {
+        const opts = options ? Object.assign({}, options) : {};
+        const headers = Object.assign({}, opts.headers || {});
+        const token = localStorage.getItem('adminToken');
+        if (token && !headers.Authorization && !headers.authorization) {
+            headers.Authorization = `Bearer ${token}`;
+        }
+        opts.headers = headers;
+        return originalFetch(url, opts);
+    };
+})();
+
 document.addEventListener('DOMContentLoaded', function() {
     verificarSesionAdmin();
 });

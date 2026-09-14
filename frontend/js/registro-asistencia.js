@@ -46,19 +46,18 @@ function avisarSiCamaraNoDisponible() {
     if (!aviso) return;
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        aviso.textContent = '⚠️ Este navegador no permite usar la cámara. El ingreso se guardará sin foto.';
+        aviso.textContent = '⚠️ Este navegador no permite usar la cámara. La foto es obligatoria: usa Chrome/Edge actualizado.';
         aviso.style.display = 'block';
         return;
     }
 
     if (!esContextoSeguroParaCamara()) {
         const host = window.location.hostname;
-        const puerto = window.location.port || '3000';
         aviso.innerHTML =
             '⚠️ <strong>La cámara está bloqueada porque abriste con HTTP.</strong><br>' +
-            `Abre en la tablet: <strong>https://${host}:${puerto}</strong><br>` +
+            `Abre en la tablet: <strong>https://${host}</strong><br>` +
             'Acepta el aviso de certificado (“Avanzado → Continuar / Aceptar el riesgo”). ' +
-            'No hace falta dominio: es HTTPS local autofirmado. Sin eso el navegador no muestra ni el permiso de cámara.';
+            'Sin HTTPS el navegador no muestra el permiso de cámara.';
         aviso.style.display = 'block';
     }
 }
@@ -132,20 +131,38 @@ function mostrarListaEmpleadosFiltrada(empleados) {
         return;
     }
     
-    listaEmpleados.innerHTML = empleados.map(emp => `
-        <div class="empleado-item-lista" onclick="seleccionarEmpleado('${emp.codigo}', '${emp.nombre} ${emp.apellido}')">
-            <div class="empleado-nombre-lista">${emp.nombre} ${emp.apellido}</div>
-            <div class="empleado-codigo-lista">${emp.codigo}</div>
-        </div>
-    `).join('');
-    
+    listaEmpleados.innerHTML = '';
+    empleados.forEach((emp) => {
+        const item = document.createElement('div');
+        item.className = 'empleado-item-lista';
+        item.dataset.codigo = emp.codigo || '';
+        const nombre = document.createElement('div');
+        nombre.className = 'empleado-nombre-lista';
+        nombre.textContent = `${emp.nombre || ''} ${emp.apellido || ''}`.trim();
+        const codigo = document.createElement('div');
+        codigo.className = 'empleado-codigo-lista';
+        codigo.textContent = emp.codigo || '';
+        item.appendChild(nombre);
+        item.appendChild(codigo);
+        item.addEventListener('click', function () {
+            seleccionarEmpleado(emp.codigo);
+        });
+        listaEmpleados.appendChild(item);
+    });
+
     listaEmpleados.style.display = 'block';
 }
 
-// Seleccionar empleado de la lista
-function seleccionarEmpleado(codigo, nombre) {
+function seleccionarEmpleado(codigo) {
     document.getElementById('codigo').value = codigo;
     document.getElementById('listaEmpleados').style.display = 'none';
+}
+
+function resolverCodigoEmpleado(dato) {
+    if (typeof window.resolverEmpleadoDeLista !== 'function' || !todosLosEmpleados.length) {
+        return { ok: true, empleado: { codigo: String(dato || '').trim() } };
+    }
+    return window.resolverEmpleadoDeLista(todosLosEmpleados, dato);
 }
 
 // Actualizar fecha y hora en tiempo real
@@ -392,14 +409,22 @@ document.getElementById('registroForm').addEventListener('submit', async functio
         return;
     }
 
-    const codigo = document.getElementById('codigo').value.trim();
+    const datoEmpleado = document.getElementById('codigo').value.trim();
     const movimiento = document.getElementById('movimiento').value;
     const turno = document.getElementById('turno').value;
 
-    if (!codigo) {
+    if (!datoEmpleado) {
         mostrarMensaje('Escribe o selecciona el código/nombre del empleado', 'error');
         return;
     }
+
+    const resuelto = resolverCodigoEmpleado(datoEmpleado);
+    if (!resuelto.ok) {
+        mostrarMensaje(`❌ ${resuelto.message}`, 'error');
+        return;
+    }
+    const codigo = resuelto.empleado.codigo;
+    document.getElementById('codigo').value = codigo;
     if (!movimiento) {
         mostrarMensaje('Selecciona INGRESO o SALIDA', 'error');
         return;

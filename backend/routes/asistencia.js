@@ -1,9 +1,31 @@
 const express = require('express');
 const router = express.Router();
 const { getDB } = require('../database/db');
+const { resolverEmpleadoDeLista } = require('../lib/resolver-empleado');
+const { requireAdmin } = require('./auth');
 
-/** Evita registros concurrentes del mismo empleado (doble submit / race). */
+/** Evita registros concurrentes del mismo empleado (doble submit / race con auto-cierre). */
 const locksEmpleado = new Set();
+
+function esperar(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function adquirirLockEmpleado(empleadoId, timeoutMs = 8000) {
+    const t0 = Date.now();
+    while (locksEmpleado.has(empleadoId)) {
+        if (Date.now() - t0 > timeoutMs) {
+            return false;
+        }
+        await esperar(25);
+    }
+    locksEmpleado.add(empleadoId);
+    return true;
+}
+
+function liberarLockEmpleado(empleadoId) {
+    locksEmpleado.delete(empleadoId);
+}
 
 /** Valida strings DD/MM/YYYY y hora con formato de pantalla (12h) */
 function esFechaHoraAsistenciaValida(fechaStr, horaStr) {
@@ -216,7 +238,8 @@ async function cargarRegistrosEmpleado(db, empleadoId) {
  * Cierra jornadas abiertas con ≥ 9.5 h usando comparación Date real
  * (nunca strings 12h). Solo inserta UNA salida por entrada abierta.
  */
-function cerrarJornadasAutomaticamente(db, empleadoId = null) {
+function cerrarJornadasAutomaticamente(db, empleadoId = null, opciones = {}) {
+    const skipLock = Boolean(opciones.skipLock);
     return (async () => {
         let empleadoIds = [];
         if (empleadoId) {
@@ -235,35 +258,49 @@ function cerrarJornadasAutomaticamente(db, empleadoId = null) {
         const mensajes = [];
 
         for (const idEmpleado of empleadoIds) {
-            const registros = await cargarRegistrosEmpleado(db, idEmpleado);
-            const abiertas = encontrarEntradasAbiertas(registros);
-            if (abiertas.length === 0) continue;
+            let lockPropio = false;
+            if (!skipLock) {
+                lockPropio = await adquirirLockEmpleado(idEmpleado);
+                if (!lockPropio) {
+                    console.warn(`Auto-cierre: no se obtuvo lock para empleado ${idEmpleado}`);
+                    continue;
+                }
+            }
+            try {
+                const registros = await cargarRegistrosEmpleado(db, idEmpleado);
+                const abiertas = encontrarEntradasAbiertas(registros);
+                if (abiertas.length === 0) continue;
 
-            for (const entrada of abiertas) {
-                const fechaHoraEntrada = parsearFechaHora(entrada.fecha, entrada.hora);
-                if (!fechaHoraEntrada) continue;
+                for (const entrada of abiertas) {
+                    const fechaHoraEntrada = parsearFechaHora(entrada.fecha, entrada.hora);
+                    if (!fechaHoraEntrada) continue;
 
-                const horasTranscurridas = (ahora - fechaHoraEntrada) / (1000 * 60 * 60);
-                if (horasTranscurridas < 9.5) continue;
+                    const horasTranscurridas = (ahora - fechaHoraEntrada) / (1000 * 60 * 60);
+                    if (horasTranscurridas < 9.5) continue;
 
-                const fechaHoraSalida = new Date(fechaHoraEntrada.getTime() + 9.5 * 60 * 60 * 1000);
-                const { fecha: fechaSalida, hora: horaSalida } = formatearFechaHoraLocal(fechaHoraSalida);
+                    const fechaHoraSalida = new Date(fechaHoraEntrada.getTime() + 9.5 * 60 * 60 * 1000);
+                    const { fecha: fechaSalida, hora: horaSalida } = formatearFechaHoraLocal(fechaHoraSalida);
 
-                const registrosFresh = await cargarRegistrosEmpleado(db, idEmpleado);
-                const sigueAbierta = encontrarEntradasAbiertas(registrosFresh).some((e) => e.id === entrada.id);
-                if (!sigueAbierta) continue;
+                    const registrosFresh = await cargarRegistrosEmpleado(db, idEmpleado);
+                    const sigueAbierta = encontrarEntradasAbiertas(registrosFresh).some((e) => e.id === entrada.id);
+                    if (!sigueAbierta) continue;
 
-                await dbRun(
-                    db,
-                    `INSERT INTO asistencia (empleado_id, fecha, hora, movimiento, turno, area)
-                     VALUES (?, ?, ?, 'SALIDA', ?, ?)`,
-                    [entrada.empleado_id, fechaSalida, horaSalida, entrada.turno, entrada.area]
-                );
+                    await dbRun(
+                        db,
+                        `INSERT INTO asistencia (empleado_id, fecha, hora, movimiento, turno, area)
+                         VALUES (?, ?, ?, 'SALIDA', ?, ?)`,
+                        [entrada.empleado_id, fechaSalida, horaSalida, entrada.turno, entrada.area]
+                    );
 
-                cerradas++;
-                const emp = await dbGet(db, 'SELECT nombre, apellido FROM empleados WHERE id = ?', [idEmpleado]);
-                const nombre = emp ? `${emp.nombre} ${emp.apellido}` : `empleado_id=${idEmpleado}`;
-                mensajes.push(`${nombre}: Jornada cerrada automáticamente a las 9.5 horas`);
+                    cerradas++;
+                    const emp = await dbGet(db, 'SELECT nombre, apellido FROM empleados WHERE id = ?', [idEmpleado]);
+                    const nombre = emp ? `${emp.nombre} ${emp.apellido}` : `empleado_id=${idEmpleado}`;
+                    mensajes.push(`${nombre}: Jornada cerrada automáticamente a las 9.5 horas`);
+                }
+            } finally {
+                if (lockPropio) {
+                    liberarLockEmpleado(idEmpleado);
+                }
             }
         }
 
@@ -308,29 +345,29 @@ router.post('/registrar', async (req, res) => {
 
     let empleado;
     try {
-        empleado = await dbGet(
+        const candidatos = await dbAll(
             db,
-            'SELECT id, nombre, apellido FROM empleados WHERE codigo = ? AND activo = 1',
-            [codigo]
+            'SELECT id, codigo, nombre, apellido, activo FROM empleados WHERE activo = 1'
         );
+        const resuelto = resolverEmpleadoDeLista(candidatos, codigo);
+        if (!resuelto.ok) {
+            return responderError(res, resuelto.status || 404, resuelto.message);
+        }
+        empleado = resuelto.empleado;
     } catch (err) {
         return responderError(res, 500, 'Error al buscar empleado: ' + err.message);
     }
 
-    if (!empleado) {
-        return responderError(res, 404, 'Empleado no encontrado o inactivo');
-    }
-
-    if (locksEmpleado.has(empleado.id)) {
+    const lockOk = await adquirirLockEmpleado(empleado.id);
+    if (!lockOk) {
         return responderError(res, 429, 'Ya hay un registro en proceso para este empleado. Espera un momento.');
     }
-    locksEmpleado.add(empleado.id);
 
     try {
         // Antes de una nueva entrada: cerrar jornadas vencidas (≥9.5h) y esperar
         if (esEntrada(movimiento)) {
             try {
-                const resultado = await cerrarJornadasAutomaticamente(db, empleado.id);
+                const resultado = await cerrarJornadasAutomaticamente(db, empleado.id, { skipLock: true });
                 if (resultado.cerradas > 0) {
                     console.log(
                         `✅ ${resultado.cerradas} jornada(s) cerrada(s) automáticamente para ${empleado.nombre} ${empleado.apellido}`
@@ -406,7 +443,7 @@ router.post('/registrar', async (req, res) => {
         console.error('Error al registrar asistencia:', err);
         return responderError(res, 500, 'Error al registrar asistencia: ' + err.message);
     } finally {
-        locksEmpleado.delete(empleado.id);
+        liberarLockEmpleado(empleado.id);
     }
 });
 
@@ -419,7 +456,7 @@ function encontrarEntradaParaSalida(registrosEmpleado, salida) {
 }
 
 // Obtener asistencia completa (admin)
-router.get('/listar', (req, res) => {
+router.get('/listar', requireAdmin, (req, res) => {
     const { fecha, fecha_inicio, fecha_fin, empleado_id, movimiento } = req.query;
     const db = getDB();
 
@@ -528,7 +565,7 @@ router.get('/listar', (req, res) => {
     });
 });
 
-router.get('/cortes-automaticos', (req, res) => {
+router.get('/cortes-automaticos', requireAdmin, (req, res) => {
     const db = getDB();
     const ahora = new Date();
     const hace24h = ahora.getTime() - 24 * 60 * 60 * 1000;
@@ -600,7 +637,7 @@ router.get('/cortes-automaticos', (req, res) => {
     );
 });
 
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requireAdmin, (req, res) => {
     const { id } = req.params;
     const db = getDB();
 
@@ -639,12 +676,3 @@ router.delete('/:id', (req, res) => {
 
 module.exports = router;
 module.exports.cerrarJornadasAutomaticamente = cerrarJornadasAutomaticamente;
-module.exports._test = {
-    parsearFechaHora,
-    timestampRegistro,
-    encontrarEntradasAbiertas,
-    compararRegistrosCronologicos,
-    calcularTiempoTrabajado,
-    redondearABloques15Minutos,
-    formatearHorasDecimales
-};

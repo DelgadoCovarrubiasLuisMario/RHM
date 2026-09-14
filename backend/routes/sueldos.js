@@ -1,6 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const { getDB } = require('../database/db');
+const {
+    claveFechaOrden,
+    periodoSemanaActual,
+    filtrarVacacionesSolapadas,
+    formatearFechaLocal
+} = require('../lib/fechas');
+const { esFestivoOficial, nombreFestivo } = require('../lib/laboral');
 
 // Función para redondear a bloques de 15 minutos (al bloque más cercano)
 function redondearABloques15Minutos(horasDecimales) {
@@ -109,6 +116,103 @@ function generarFechasEnRango(fechaInicio, fechaFin) {
     return generarFechasEntre(fechaInicio, fechaFin);
 }
 
+function desplazarFechaDdMmYyyy(fechaStr, dias) {
+    const [dia, mes, año] = String(fechaStr || '').split('/').map(Number);
+    const dt = new Date(año, mes - 1, dia);
+    dt.setDate(dt.getDate() + dias);
+    return formatearFechaLocal(dt);
+}
+
+/** Incluye un día extra a cada lado para emparejar turnos que cruzan medianoche. */
+function fechasConsultaAsistencia(fechaInicio, fechaFin) {
+    const nucleo = generarFechasEnRango(fechaInicio, fechaFin);
+    if (!nucleo.length) {
+        return [fechaInicio, fechaFin].filter(Boolean);
+    }
+    return [...new Set([
+        desplazarFechaDdMmYyyy(fechaInicio, -1),
+        ...nucleo,
+        desplazarFechaDdMmYyyy(fechaFin, 1)
+    ])];
+}
+
+function fechaDentroDePeriodo(fecha, fechaInicio, fechaFin) {
+    const k = claveFechaOrden(fecha);
+    return k >= claveFechaOrden(fechaInicio) && k <= claveFechaOrden(fechaFin);
+}
+
+function timestampAsistenciaSueldo(reg) {
+    try {
+        const [dia, mes, año] = String(reg.fecha || '').split('/');
+        const horaUpper = String(reg.hora || '').toUpperCase();
+        const esPM = horaUpper.includes('P.M.') || horaUpper.includes('PM') || horaUpper.includes('P. M.');
+        const esAM = horaUpper.includes('A.M.') || horaUpper.includes('AM') || horaUpper.includes('A. M.');
+        const partesHora = String(reg.hora || '').match(/(\d+):(\d+):(\d+)/);
+        if (!partesHora) return Number(reg.id) || 0;
+        let horas = parseInt(partesHora[1], 10);
+        const minutos = parseInt(partesHora[2], 10);
+        const segundos = parseInt(partesHora[3], 10);
+        if (esPM && horas !== 12) horas += 12;
+        else if (esAM && horas === 12) horas = 0;
+        return new Date(parseInt(año, 10), parseInt(mes, 10) - 1, parseInt(dia, 10), horas, minutos, segundos).getTime();
+    } catch {
+        return Number(reg.id) || 0;
+    }
+}
+
+/** Empareja ENTRADA→SALIDA en orden real (incluye turno nocturno que cruza medianoche). */
+function emparejarEntradaSalida(registros) {
+    const sorted = [...(registros || [])].sort((a, b) => {
+        const ta = timestampAsistenciaSueldo(a);
+        const tb = timestampAsistenciaSueldo(b);
+        if (ta !== tb) return ta - tb;
+        return (Number(a.id) || 0) - (Number(b.id) || 0);
+    });
+    const abiertas = [];
+    const pares = [];
+    for (const r of sorted) {
+        if (r.movimiento === 'ENTRADA' || r.movimiento === 'INGRESO') {
+            abiertas.push(r);
+        } else if (r.movimiento === 'SALIDA' && abiertas.length > 0) {
+            pares.push({ entrada: abiertas.shift(), salida: r });
+        }
+    }
+    return pares;
+}
+
+function agruparRegistrosPorDiaEntrada(registros) {
+    const registrosPorDia = {};
+    emparejarEntradaSalida(registros).forEach(({ entrada, salida }) => {
+        const fecha = entrada.fecha;
+        if (!registrosPorDia[fecha]) registrosPorDia[fecha] = [];
+        registrosPorDia[fecha].push(entrada, salida);
+    });
+    return registrosPorDia;
+}
+
+/** Suma cada par del día (no de la primera entrada a la última salida). */
+function resumenJornadaDelDia(registrosDia) {
+    const pares = emparejarEntradaSalida(registrosDia);
+    if (pares.length === 0) return null;
+    let horasTrabajadas = 0;
+    pares.forEach(({ entrada, salida }) => {
+        horasTrabajadas += calcularHorasTrabajadas(
+            entrada.fecha, entrada.hora,
+            salida.fecha, salida.hora
+        );
+    });
+    if (horasTrabajadas <= 0) return null;
+    return {
+        entrada: pares[0].entrada,
+        salida: pares[pares.length - 1].salida,
+        horasTrabajadas
+    };
+}
+
+function fechasOrdenadasDeRegistros(registrosPorDia) {
+    return Object.keys(registrosPorDia).sort((a, b) => claveFechaOrden(a).localeCompare(claveFechaOrden(b)));
+}
+
 // Función para verificar si una fecha está dentro de un rango de vacaciones
 function fechaEnVacaciones(fecha, vacaciones) {
     const [dia, mes, año] = fecha.split('/').map(Number);
@@ -140,14 +244,9 @@ router.get('/calcular/:empleado_id', (req, res) => {
         fechaInicio = fecha_inicio; // Formato DD/MM/YYYY
         fechaFin = fecha_fin;
     } else {
-        const hoy = new Date();
-        const lunes = new Date(hoy);
-        lunes.setDate(hoy.getDate() - hoy.getDay() + 1); // Lunes de esta semana
-        const domingo = new Date(lunes);
-        domingo.setDate(lunes.getDate() + 6); // Domingo de esta semana
-        
-        fechaInicio = lunes.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
-        fechaFin = domingo.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        const semana = periodoSemanaActual();
+        fechaInicio = semana.fechaInicio;
+        fechaFin = semana.fechaFin;
     }
 
     // Obtener empleado
@@ -164,8 +263,7 @@ router.get('/calcular/:empleado_id', (req, res) => {
             const sueldoBase = empleado.sueldo_base || 2000;
             const pagoPorHora = sueldoBase / 48; // Sueldo base / 48 horas semanales (6 días × 8 horas)
 
-            // Generar todas las fechas en el rango
-            const fechasEnRango = generarFechasEnRango(fechaInicio, fechaFin);
+            const fechasEnRango = fechasConsultaAsistencia(fechaInicio, fechaFin);
             
             // Obtener todos los registros de asistencia de la semana
             db.all(
@@ -205,15 +303,14 @@ router.get('/calcular/:empleado_id', (req, res) => {
                                 db.all(
                                     `SELECT fecha_inicio, fecha_fin, dias, año
                                      FROM vacaciones
-                                     WHERE empleado_id = ?
-                                     AND NOT (fecha_fin < ? OR fecha_inicio > ?)`,
-                                    [empleado_id, fechaInicio, fechaFin],
+                                     WHERE empleado_id = ?`,
+                                    [empleado_id],
                                     (err, vacaciones) => {
                                         if (err) {
                                             console.error(`Error al obtener vacaciones para empleado ${empleado_id}:`, err);
                                         }
 
-                                        const vacacionesArray = vacaciones || [];
+                                        const vacacionesArray = filtrarVacacionesSolapadas(vacaciones, fechaInicio, fechaFin);
 
                                         // Procesar registros para calcular sueldo
                                         const calculo = calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, fechaFin, descuentosVarios, vacacionesArray, empleado.nombre, empleado.apellido);
@@ -256,9 +353,11 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
                 dias_trabajados: 0,
                 dias_faltados: 0,
                 dias_vacaciones: 0,
+                dias_festivos: 0,
                 horas_dobles: '0.00',
                 horas_triples: '0.00',
-                horas_turno: '0.00'
+                horas_turno: '0.00',
+                horas_festivo_trabajadas: '0.00'
             },
             calculos: {
                 sueldo_base: '6000.00',
@@ -266,6 +365,9 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
                 monto_horas_dobles: '0.00',
                 monto_horas_triples: '0.00',
                 monto_horas_turno: '0.00',
+                monto_prima_dominical: '0.00',
+                monto_prima_vacacional: '0.00',
+                monto_festivo_trabajado: '0.00',
                 descuentos_varios: descuentosVarios.toFixed(2)
             },
             total: (6000 - descuentosVarios).toFixed(2),
@@ -283,15 +385,15 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
     let horasPlantaExtraSemana = 0;
     const horasExtrasPorDia = []; // Para distribuir dobles/triples
     let diasTrabajados = 0; // Días con asistencia registrada (para calcular faltas)
+    let horasFestivoTrabajadas = 0;
+    let trabajoDomingo = false;
 
     // Agrupar registros por día para procesar entrada/salida
-    const registrosPorDia = {};
-    registros.forEach(reg => {
-        // Usar la fecha de entrada para agrupar (si cruza medianoche, se cuenta en el día de entrada)
-        if (!registrosPorDia[reg.fecha]) {
-            registrosPorDia[reg.fecha] = [];
+    const registrosPorDia = agruparRegistrosPorDiaEntrada(registros);
+    Object.keys(registrosPorDia).forEach((fecha) => {
+        if (!fechaDentroDePeriodo(fecha, fechaInicio, fechaFin)) {
+            delete registrosPorDia[fecha];
         }
-        registrosPorDia[reg.fecha].push(reg);
     });
 
     // Función auxiliar para convertir hora a minutos desde medianoche (para ordenar)
@@ -321,94 +423,61 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
     };
 
     // Primera pasada: calcular horas extras y determinar turnos trabajados
-    Object.keys(registrosPorDia).sort().forEach(fecha => {
+    fechasOrdenadasDeRegistros(registrosPorDia).forEach(fecha => {
         const registrosDia = registrosPorDia[fecha];
         const esDomingoDia = esDomingo(fecha);
-        
-        // Emparejar entrada con salida: PRIMERA entrada y ÚLTIMA salida del día
-        let entrada = null;
-        let salida = null;
-        
-        // Ordenar registros por hora para encontrar la primera entrada y última salida
-        const registrosOrdenados = [...registrosDia].sort((a, b) => {
-            return horaAMinutos(a.hora) - horaAMinutos(b.hora);
-        });
-        
-        // Buscar la PRIMERA entrada
-        for (let i = 0; i < registrosOrdenados.length; i++) {
-            if (registrosOrdenados[i].movimiento === 'ENTRADA' || registrosOrdenados[i].movimiento === 'INGRESO') {
-                entrada = registrosOrdenados[i];
-                break; // Tomar la primera entrada
+        const jornada = resumenJornadaDelDia(registrosDia);
+        if (!jornada) return;
+
+        const { entrada, salida, horasTrabajadas } = jornada;
+        const festivo = esFestivoOficial(fecha);
+
+        if (esDomingoDia) {
+            trabajoDomingo = true;
+        }
+        if (festivo && !esDomingoDia) {
+            horasFestivoTrabajadas += horasTrabajadas;
+            diasTrabajados++;
+        } else if (!esDomingoDia && entrada.turno === 4) {
+            const minSalida = horaAMinutos(salida.hora);
+            const min1630 = 16 * 60 + 30;
+            const min1800 = 18 * 60;
+            if (minSalida >= min1630 && minSalida <= min1800) {
+                horasPlantaExtraSemana += 1.5;
             }
         }
-        
-        // Buscar la ÚLTIMA salida
-        for (let i = registrosOrdenados.length - 1; i >= 0; i--) {
-            if (registrosOrdenados[i].movimiento === 'SALIDA') {
-                salida = registrosOrdenados[i];
-                break; // Tomar la última salida
+        if (festivo && !esDomingoDia) {
+            // Festivo laboral: el descanso se paga aparte; las horas van a doble, no a extra semanal.
+        } else if (!esDomingoDia) {
+            diasTrabajados++;
+            let horasNormalesDia = Math.min(horasTrabajadas, 8);
+            let horasExtrasDia = Math.max(0, horasTrabajadas - 8);
+            horasNormalesTotales += horasNormalesDia;
+            if (horasExtrasDia > 0) {
+                horasExtrasSemanales += horasExtrasDia;
+                horasExtrasPorDia.push({
+                    fecha,
+                    horas_extras: horasExtrasDia,
+                    es_domingo: false
+                });
             }
-        }
-        
-        if (entrada && salida) {
-            const horasTrabajadas = calcularHorasTrabajadas(
-                entrada.fecha, entrada.hora, 
-                salida.fecha, salida.hora
-            );
-            
-            // Solo procesar si hay horas trabajadas (aunque sean pocas, como 1 hora)
-            if (horasTrabajadas > 0) {
-                if (!esDomingoDia && entrada.turno === 4) {
-                    const minSalida = horaAMinutos(salida.hora);
-                    const min1630 = 16 * 60 + 30;
-                    const min1800 = 18 * 60;
-                    if (minSalida >= min1630 && minSalida <= min1800) {
-                        horasPlantaExtraSemana += 1.5;
-                    }
-                }
-                if (!esDomingoDia) {
-                    // Contar como día trabajado (para calcular faltas)
-                    diasTrabajados++;
-                    
-                    // Días normales: primeras 8 horas son normales, el resto extras
-                    let horasNormalesDia = Math.min(horasTrabajadas, 8);
-                    let horasExtrasDia = Math.max(0, horasTrabajadas - 8);
-                    
-                    horasNormalesTotales += horasNormalesDia;
-                    
-                    if (horasExtrasDia > 0) {
-                        horasExtrasSemanales += horasExtrasDia;
-                        horasExtrasPorDia.push({
-                            fecha,
-                            horas_extras: horasExtrasDia,
-                            es_domingo: false
-                        });
-                    }
-                    
-                    // Calcular horas turno por día
-                    let horasTurnoDia = 0;
-                    if (entrada.turno === 1) {
-                        horasTurnoDia = 1; // Turno 1 = 1 hora turno
-                    } else if (entrada.turno === 3) {
-                        horasTurnoDia = 0.5; // Turno 3 = 0.5 horas turno
-                    }
-                    // Turno 2 = 0 horas turno
-                    
-                    // Acumular horas turno (máximo 6 por semana)
-                    horasTurnoSemana += horasTurnoDia;
-                    if (horasTurnoSemana > 6) {
-                        horasTurnoSemana = 6; // Limitar a 6 horas por semana
-                    }
-                } else {
-                    // Domingo: TODAS las horas se cuentan como horas extras (dobles/triples según acumulación semanal)
-                    horasExtrasSemanales += horasTrabajadas;
-                    horasExtrasPorDia.push({
-                        fecha,
-                        horas_extras: horasTrabajadas,
-                        es_domingo: true
-                    });
-                }
+            let horasTurnoDia = 0;
+            if (entrada.turno === 1) {
+                horasTurnoDia = 1;
+            } else if (entrada.turno === 3) {
+                horasTurnoDia = 0.5;
             }
+            horasTurnoSemana += horasTurnoDia;
+            if (horasTurnoSemana > 6) {
+                horasTurnoSemana = 6;
+            }
+        } else {
+            horasExtrasSemanales += horasTrabajadas;
+            horasExtrasPorDia.push({
+                fecha,
+                horas_extras: horasTrabajadas,
+                es_domingo: true
+            });
         }
     });
 
@@ -450,104 +519,75 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
     });
 
     // Tercera pasada: crear desglose diario completo
-    Object.keys(registrosPorDia).sort().forEach(fecha => {
-        const registrosDia = registrosPorDia[fecha];
+    fechasOrdenadasDeRegistros(registrosPorDia).forEach(fecha => {
         const esDomingoDia = esDomingo(fecha);
-        
-        // Buscar entrada y salida: PRIMERA entrada y ÚLTIMA salida del día
-        let entrada = null;
-        let salida = null;
-        
-        // Ordenar registros por hora para encontrar la primera entrada y última salida
-        const registrosOrdenados = [...registrosDia].sort((a, b) => {
-            return horaAMinutos(a.hora) - horaAMinutos(b.hora);
-        });
-        
-        // Buscar la PRIMERA entrada
-        for (let i = 0; i < registrosOrdenados.length; i++) {
-            if (registrosOrdenados[i].movimiento === 'ENTRADA' || registrosOrdenados[i].movimiento === 'INGRESO') {
-                entrada = registrosOrdenados[i];
-                break; // Tomar la primera entrada
-            }
-        }
-        
-        // Buscar la ÚLTIMA salida
-        for (let i = registrosOrdenados.length - 1; i >= 0; i--) {
-            if (registrosOrdenados[i].movimiento === 'SALIDA') {
-                salida = registrosOrdenados[i];
-                break; // Tomar la última salida
-            }
-        }
-        
-        if (entrada && salida) {
-            const horasTrabajadas = calcularHorasTrabajadas(
-                entrada.fecha, entrada.hora, 
-                salida.fecha, salida.hora
-            );
+        const jornada = resumenJornadaDelDia(registrosPorDia[fecha]);
+        if (!jornada) return;
 
-            // Incluir en el desglose aunque sean pocas horas (ej: 1 hora)
-            if (horasTrabajadas > 0) {
-                let horasDoblesDia = 0;
-                let horasTriplesDia = 0;
-                let horasNormalesDia = 0;
+        const { entrada, salida, horasTrabajadas } = jornada;
+        const festivo = esFestivoOficial(fecha);
+        let horasDoblesDia = 0;
+        let horasTriplesDia = 0;
+        let horasNormalesDia = 0;
+        let horasFestivoDia = 0;
 
-                // Buscar en el array de horas extras para saber cuántas son dobles/triples
-                const diaExtras = horasExtrasPorDia.find(d => d.fecha === fecha);
-                if (diaExtras) {
-                    if (esDomingoDia) {
-                        // Domingo: todas las horas se cuentan como horas extras (dobles/triples según acumulación)
+        if (festivo && !esDomingoDia) {
+            horasFestivoDia = horasTrabajadas;
+        } else {
+            const diaExtras = horasExtrasPorDia.find(d => d.fecha === fecha);
+            if (diaExtras) {
+                if (esDomingoDia) {
+                    horasDoblesDia = diaExtras.horas_dobles || 0;
+                    horasTriplesDia = diaExtras.horas_triples || 0;
+                    horasNormalesDia = 0;
+                } else {
+                    horasNormalesDia = Math.min(horasTrabajadas, 8);
+                    if (horasTrabajadas > 8) {
                         horasDoblesDia = diaExtras.horas_dobles || 0;
                         horasTriplesDia = diaExtras.horas_triples || 0;
-                        horasNormalesDia = 0;
-                    } else {
-                        // Días normales: primeras 8 horas normales, resto extras
-                        horasNormalesDia = Math.min(horasTrabajadas, 8);
-                        if (horasTrabajadas > 8) {
-                            horasDoblesDia = diaExtras.horas_dobles || 0;
-                            horasTriplesDia = diaExtras.horas_triples || 0;
-                        }
-                    }
-                } else {
-                    // No hay extras, todas son normales (hasta 8 horas)
-                    horasNormalesDia = Math.min(horasTrabajadas, 8);
-                }
-
-                // Calcular horas turno del día
-                let horasTurnoDia = 0;
-                if (!esDomingoDia) {
-                    if (entrada.turno === 1) {
-                        horasTurnoDia = 1;
-                    } else if (entrada.turno === 3) {
-                        horasTurnoDia = 0.5;
                     }
                 }
-
-                let horasPlantaExtraDia = 0;
-                if (!esDomingoDia && entrada.turno === 4) {
-                    const minSalida = horaAMinutos(salida.hora);
-                    const min1630 = 16 * 60 + 30;
-                    const min1800 = 18 * 60;
-                    if (minSalida >= min1630 && minSalida <= min1800) {
-                        horasPlantaExtraDia = 1.5;
-                    }
-                }
-
-                desgloseDiario.push({
-                    fecha,
-                    es_domingo: esDomingoDia,
-                    turno: entrada.turno,
-                    hora_entrada: entrada.hora,
-                    hora_salida: salida.hora,
-                    horas_trabajadas: horasTrabajadas.toFixed(2),
-                    horas_normales: horasNormalesDia.toFixed(2),
-                    horas_dobles: horasDoblesDia.toFixed(2),
-                    horas_triples: horasTriplesDia.toFixed(2),
-                    horas_turno: horasTurnoDia.toFixed(2),
-                    horas_planta_extra: horasPlantaExtraDia.toFixed(2),
-                    es_vacaciones: false
-                });
+            } else {
+                horasNormalesDia = Math.min(horasTrabajadas, 8);
             }
         }
+
+        let horasTurnoDia = 0;
+        if (!esDomingoDia && !festivo) {
+            if (entrada.turno === 1) {
+                horasTurnoDia = 1;
+            } else if (entrada.turno === 3) {
+                horasTurnoDia = 0.5;
+            }
+        }
+
+        let horasPlantaExtraDia = 0;
+        if (!esDomingoDia && !festivo && entrada.turno === 4) {
+            const minSalida = horaAMinutos(salida.hora);
+            const min1630 = 16 * 60 + 30;
+            const min1800 = 18 * 60;
+            if (minSalida >= min1630 && minSalida <= min1800) {
+                horasPlantaExtraDia = 1.5;
+            }
+        }
+
+        desgloseDiario.push({
+            fecha,
+            es_domingo: esDomingoDia,
+            es_festivo: festivo,
+            nombre_festivo: festivo ? nombreFestivo(fecha) : '',
+            turno: entrada.turno,
+            hora_entrada: entrada.hora,
+            hora_salida: salida.hora,
+            horas_trabajadas: horasTrabajadas.toFixed(2),
+            horas_normales: horasNormalesDia.toFixed(2),
+            horas_dobles: horasDoblesDia.toFixed(2),
+            horas_triples: horasTriplesDia.toFixed(2),
+            horas_turno: horasTurnoDia.toFixed(2),
+            horas_planta_extra: horasPlantaExtraDia.toFixed(2),
+            horas_festivo_trabajadas: horasFestivoDia.toFixed(2),
+            es_vacaciones: false
+        });
     });
 
     // Cuarta pasada: agregar días de vacaciones y calcular días esperados
@@ -555,25 +595,55 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
     const todasLasFechas = generarFechasEntre(fechaInicio, fechaFin);
     let diasVacaciones = 0;
     let diasEsperados = 0;
+    let diasFestivos = 0;
     
     todasLasFechas.forEach(fecha => {
         const esDomingoDia = esDomingo(fecha);
-        // Solo considerar días laborables (lunes a sábado)
+        const festivo = esFestivoOficial(fecha);
+
+        if (festivo) {
+            diasFestivos++;
+            horasNormalesTotales += 8;
+            if (!esDomingoDia) {
+                diasEsperados++;
+                diasTrabajados++;
+            }
+            desgloseDiario.push({
+                fecha,
+                es_domingo: esDomingoDia,
+                es_festivo: true,
+                nombre_festivo: nombreFestivo(fecha),
+                turno: null,
+                hora_entrada: null,
+                hora_salida: null,
+                horas_trabajadas: '8.00',
+                horas_normales: '8.00',
+                horas_dobles: '0.00',
+                horas_triples: '0.00',
+                horas_turno: '0.00',
+                horas_planta_extra: '0.00',
+                horas_festivo_trabajadas: '0.00',
+                es_vacaciones: false,
+                es_descanso_obligatorio: true
+            });
+            return;
+        }
+
         if (!esDomingoDia) {
-            diasEsperados++; // Contar días esperados
+            diasEsperados++;
             
             const tieneRegistros = registrosPorDia[fecha] && registrosPorDia[fecha].length > 0;
             const estaEnVacaciones = fechaEnVacaciones(fecha, vacaciones);
             
-            // Si está en vacaciones y no tiene registros, agregar 8 horas normales
             if (estaEnVacaciones && !tieneRegistros) {
-                diasTrabajados++; // Contar como día trabajado (no falta)
+                diasTrabajados++;
                 diasVacaciones++;
-                horasNormalesTotales += 8; // 8 horas por día de vacaciones
+                horasNormalesTotales += 8;
                 
                 desgloseDiario.push({
                     fecha,
                     es_domingo: false,
+                    es_festivo: false,
                     turno: null,
                     hora_entrada: null,
                     hora_salida: null,
@@ -613,13 +683,20 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
     // El descuento se aplica naturalmente: si trabaja menos horas, gana menos.
     const sueldoPorDia = sueldoBase / 6;
     const descuentoFaltas = diasFaltados * sueldoPorDia;
+    const montoPrimaDominical = trabajoDomingo ? sueldoPorDia * 0.25 : 0;
+    const montoPrimaVacacional = diasVacaciones * 8 * pagoPorHora * 0.25;
+    const montoFestivoTrabajado = horasFestivoTrabajadas * pagoPorHora * 2;
     
-    // Calcular total semanal:
-    // (Horas trabajadas con cálculos pertinentes) - (Solo descuentos varios, NO descuento por faltas)
-    // El descuento por faltas se aplica naturalmente: si trabaja menos horas, gana menos
-    const totalGanado = sueldoBaseCalculado + montoHorasDobles + montoHorasTriples + montoHorasTurno + montoHorasPlantaExtra;
-    const totalBruto = totalGanado - descuentosVarios; // NO restar descuentoFaltas
-    const total = Math.max(0, totalBruto); // El total no puede ser negativo (solo por descuentos varios)
+    const totalGanado = sueldoBaseCalculado
+        + montoHorasDobles
+        + montoHorasTriples
+        + montoHorasTurno
+        + montoHorasPlantaExtra
+        + montoPrimaDominical
+        + montoPrimaVacacional
+        + montoFestivoTrabajado;
+    const totalBruto = totalGanado - descuentosVarios;
+    const total = Math.max(0, totalBruto);
 
     return {
         desglose_diario: desgloseDiario,
@@ -629,9 +706,12 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
             horas_triples: horasTriples.toFixed(2),
             horas_turno: horasTurnoSemana.toFixed(2),
             horas_planta_extra: horasPlantaExtraSemana.toFixed(2),
+            horas_festivo_trabajadas: horasFestivoTrabajadas.toFixed(2),
             dias_trabajados: diasTrabajados,
             dias_faltados: diasFaltados,
-            dias_vacaciones: diasVacaciones
+            dias_vacaciones: diasVacaciones,
+            dias_festivos: diasFestivos,
+            trabajo_domingo: trabajoDomingo
         },
         calculos: {
             sueldo_base: sueldoBaseCalculado.toFixed(2),
@@ -639,6 +719,9 @@ function calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, 
             monto_horas_triples: montoHorasTriples.toFixed(2),
             monto_horas_turno: montoHorasTurno.toFixed(2),
             monto_horas_planta_extra: montoHorasPlantaExtra.toFixed(2),
+            monto_prima_dominical: montoPrimaDominical.toFixed(2),
+            monto_prima_vacacional: montoPrimaVacacional.toFixed(2),
+            monto_festivo_trabajado: montoFestivoTrabajado.toFixed(2),
             descuento_faltas: descuentoFaltas.toFixed(2),
             descuentos_varios: descuentosVarios.toFixed(2)
         },
@@ -674,28 +757,34 @@ router.get('/listar', (req, res) => {
                 });
             }
 
+            let fechaInicio;
+            let fechaFin;
+            if (fecha_inicio && fecha_fin) {
+                fechaInicio = fecha_inicio;
+                fechaFin = fecha_fin;
+            } else {
+                const semana = periodoSemanaActual();
+                fechaInicio = semana.fechaInicio;
+                fechaFin = semana.fechaFin;
+            }
+
+            db.all(
+                `SELECT empleado_id FROM pagos WHERE fecha_inicio = ? AND fecha_fin = ?`,
+                [fechaInicio, fechaFin],
+                (errPagos, pagosRows) => {
+                    if (errPagos) {
+                        return res.status(500).json({
+                            success: false,
+                            message: 'Error al consultar pagos: ' + errPagos.message
+                        });
+                    }
+                    const pagados = new Set((pagosRows || []).map((p) => p.empleado_id));
+
             empleados.forEach(empleado => {
                 const sueldoBase = empleado.sueldo_base || 2000;
-                const pagoPorHora = sueldoBase / 48; // Sueldo base / 48 horas semanales (6 días × 8 horas)
+                const pagoPorHora = sueldoBase / 48;
 
-                // Determinar fechas
-                let fechaInicio, fechaFin;
-                if (fecha_inicio && fecha_fin) {
-                    fechaInicio = fecha_inicio;
-                    fechaFin = fecha_fin;
-                } else {
-                    const hoy = new Date();
-                    const lunes = new Date(hoy);
-                    lunes.setDate(hoy.getDate() - hoy.getDay() + 1);
-                    const domingo = new Date(lunes);
-                    domingo.setDate(lunes.getDate() + 6);
-                    
-                    fechaInicio = lunes.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                    fechaFin = domingo.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                }
-
-                // Generar todas las fechas en el rango
-                const fechasEnRango = generarFechasEnRango(fechaInicio, fechaFin);
+                const fechasEnRango = fechasConsultaAsistencia(fechaInicio, fechaFin);
                 
                 // Obtener registros de asistencia
                 db.all(
@@ -755,15 +844,14 @@ router.get('/listar', (req, res) => {
                                 db.all(
                                     `SELECT fecha_inicio, fecha_fin, dias, año
                                      FROM vacaciones
-                                     WHERE empleado_id = ?
-                                     AND NOT (fecha_fin < ? OR fecha_inicio > ?)`,
-                                    [empleado.id, fechaInicio, fechaFin],
+                                     WHERE empleado_id = ?`,
+                                    [empleado.id],
                                     (err, vacaciones) => {
                                         if (err) {
                                             console.error(`Error al obtener vacaciones para empleado ${empleado.id}:`, err);
                                         }
 
-                                        const vacacionesArray = vacaciones || [];
+                                        const vacacionesArray = filtrarVacacionesSolapadas(vacaciones, fechaInicio, fechaFin);
                                         const calculo = calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fechaInicio, fechaFin, descuentosVarios, vacacionesArray, empleado.nombre, empleado.apellido);
                                         
                                         sueldos.push({
@@ -771,6 +859,7 @@ router.get('/listar', (req, res) => {
                                             empleado: `${empleado.nombre} ${empleado.apellido}`,
                                             sueldo_base: sueldoBase,
                                             pago_por_hora: pagoPorHora,
+                                            ya_pagado: pagados.has(empleado.id),
                                             periodo: {
                                                 fecha_inicio: fechaInicio,
                                                 fecha_fin: fechaFin
@@ -797,163 +886,183 @@ router.get('/listar', (req, res) => {
                     }
                 );
             });
+                }
+            );
         }
     );
 });
 
-// Pagar sueldo a un empleado (elimina asistencia y descuentos, guarda en historial)
-router.post('/pagar/:empleado_id', (req, res) => {
+const locksPago = new Set();
+
+function dbRunP(db, sql, params = []) {
+    return new Promise((resolve, reject) => {
+        db.run(sql, params, function (err) {
+            if (err) reject(err);
+            else resolve({ lastID: this.lastID, changes: this.changes });
+        });
+    });
+}
+
+function dbGetP(db, sql, params = []) {
+    return new Promise((resolve, reject) => {
+        db.get(sql, params, (err, row) => {
+            if (err) reject(err);
+            else resolve(row || null);
+        });
+    });
+}
+
+function dbAllP(db, sql, params = []) {
+    return new Promise((resolve, reject) => {
+        db.all(sql, params, (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows || []);
+        });
+    });
+}
+
+// Pagar sueldo a un empleado (conserva checadas; guarda historial y quita descuentos del período)
+router.post('/pagar/:empleado_id', async (req, res) => {
     const { empleado_id } = req.params;
     const { fecha_inicio, fecha_fin } = req.body;
     const db = getDB();
 
     if (!fecha_inicio || !fecha_fin) {
-        return res.status(400).json({ 
-            success: false, 
-            message: 'fecha_inicio y fecha_fin son requeridos' 
+        return res.status(400).json({
+            success: false,
+            message: 'fecha_inicio y fecha_fin son requeridos'
         });
     }
 
-    // Obtener empleado
-    db.get('SELECT id, nombre, apellido, sueldo_base FROM empleados WHERE id = ?', 
-        [empleado_id], 
-        (err, empleado) => {
-            if (err || !empleado) {
-                return res.status(404).json({ 
-                    success: false, 
-                    message: 'Empleado no encontrado' 
-                });
-            }
+    const lockKey = `${empleado_id}:${fecha_inicio}:${fecha_fin}`;
+    if (locksPago.has(lockKey)) {
+        return res.status(429).json({
+            success: false,
+            message: 'Ya hay un pago en proceso para este empleado y período.'
+        });
+    }
+    locksPago.add(lockKey);
 
-            const sueldoBase = empleado.sueldo_base || 2000;
-            const pagoPorHora = sueldoBase / 48; // Sueldo base / 48 horas semanales (6 días × 8 horas)
-
-            // Obtener registros de asistencia para calcular el sueldo antes de eliminar
-            // Generar todas las fechas en el rango
-            const fechasEnRango = generarFechasEnRango(fecha_inicio, fecha_fin);
-            
-            db.all(
-                `SELECT fecha, hora, movimiento, turno 
-                 FROM asistencia 
-                 WHERE empleado_id = ? 
-                 AND fecha IN (${fechasEnRango.map(() => '?').join(',')})
-                 ORDER BY fecha ASC, hora ASC`,
-                [empleado_id, ...fechasEnRango],
-                (err, registros) => {
-                    if (err) {
-                        return res.status(500).json({ 
-                            success: false, 
-                            message: 'Error al obtener asistencia: ' + err.message 
-                        });
-                    }
-
-                    // Obtener descuentos varios
-                    db.all(
-                        `SELECT COALESCE(SUM(monto), 0) as total_descuentos
-                         FROM descuentos_varios 
-                         WHERE empleado_id = ? 
-                         AND fecha_inicio = ? 
-                         AND fecha_fin = ?`,
-                        [empleado_id, fecha_inicio, fecha_fin],
-                        (err, descuentos) => {
-                            if (err) {
-                                return res.status(500).json({ 
-                                    success: false, 
-                                    message: 'Error al obtener descuentos: ' + err.message 
-                                });
-                            }
-
-                            const descuentosVarios = descuentos[0]?.total_descuentos || 0;
-
-                            // Obtener vacaciones que se solapan con el período
-                            db.all(
-                                `SELECT fecha_inicio, fecha_fin, dias, año
-                                 FROM vacaciones
-                                 WHERE empleado_id = ?
-                                 AND NOT (fecha_fin < ? OR fecha_inicio > ?)`,
-                                [empleado_id, fecha_inicio, fecha_fin],
-                                (err, vacaciones) => {
-                                    if (err) {
-                                        console.error(`Error al obtener vacaciones para empleado ${empleado_id}:`, err);
-                                    }
-
-                                    const vacacionesArray = vacaciones || [];
-                                    
-                                    // Calcular sueldo completo
-                                    const calculo = calcularSueldoSemanal(registros, sueldoBase, pagoPorHora, fecha_inicio, fecha_fin, descuentosVarios, vacacionesArray, empleado.nombre, empleado.apellido);
-                                    
-                                    const desgloseJSON = JSON.stringify({
-                                        empleado: `${empleado.nombre} ${empleado.apellido}`,
-                                        periodo: {
-                                            fecha_inicio: fecha_inicio,
-                                            fecha_fin: fecha_fin
-                                        },
-                                        sueldo_base: sueldoBase,
-                                        pago_por_hora: pagoPorHora,
-                                        ...calculo
-                                    });
-
-                                    // Guardar en historial de pagos
-                                    db.run(
-                                        `INSERT INTO pagos (empleado_id, fecha_inicio, fecha_fin, area, sueldo_base, total_pagado, desglose)
-                                         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                                        [empleado_id, fecha_inicio, fecha_fin, null, sueldoBase, calculo.total, desgloseJSON],
-                                        function(err) {
-                                    if (err) {
-                                        return res.status(500).json({ 
-                                            success: false, 
-                                            message: 'Error al guardar pago: ' + err.message 
-                                        });
-                                    }
-
-                                    // Generar todas las fechas en el rango para eliminar
-                                    const fechasEnRangoEliminar = generarFechasEnRango(fecha_inicio, fecha_fin);
-                                    
-                                    // Eliminar registros de asistencia del período
-                                    db.run(
-                                        `DELETE FROM asistencia 
-                                         WHERE empleado_id = ? 
-                                         AND fecha IN (${fechasEnRangoEliminar.map(() => '?').join(',')})`,
-                                        [empleado_id, ...fechasEnRangoEliminar],
-                                        (err) => {
-                                            if (err) {
-                                                console.error('Error al eliminar asistencia:', err);
-                                                // Continuar aunque haya error
-                                            }
-
-                                            // Eliminar descuentos varios del período
-                                            db.run(
-                                                `DELETE FROM descuentos_varios 
-                                                 WHERE empleado_id = ? 
-                                                 AND fecha_inicio = ? 
-                                                 AND fecha_fin = ?`,
-                                                [empleado_id, fecha_inicio, fecha_fin],
-                                                (err) => {
-                                                    if (err) {
-                                                        console.error('Error al eliminar descuentos:', err);
-                                                        // Continuar aunque haya error
-                                                    }
-
-                                                            res.json({
-                                                                success: true,
-                                                                message: `Pago registrado para ${empleado.nombre} ${empleado.apellido}`,
-                                                                pago_id: this.lastID,
-                                                                total_pagado: calculo.total
-                                                            });
-                                                        }
-                                                    );
-                                                }
-                                            );
-                                        }
-                                    );
-                                }
-                            );
-                        }
-                    );
-                }
-            );
+    try {
+        const empleado = await dbGetP(
+            db,
+            'SELECT id, nombre, apellido, sueldo_base FROM empleados WHERE id = ?',
+            [empleado_id]
+        );
+        if (!empleado) {
+            return res.status(404).json({ success: false, message: 'Empleado no encontrado' });
         }
-    );
+
+        const existente = await dbGetP(
+            db,
+            `SELECT id FROM pagos
+             WHERE empleado_id = ? AND fecha_inicio = ? AND fecha_fin = ?`,
+            [empleado_id, fecha_inicio, fecha_fin]
+        );
+        if (existente) {
+            return res.status(409).json({
+                success: false,
+                message: 'Este período ya fue pagado. Revisa el historial de pagos.'
+            });
+        }
+
+        const sueldoBase = empleado.sueldo_base || 2000;
+        const pagoPorHora = sueldoBase / 48;
+        const fechasEnRango = fechasConsultaAsistencia(fecha_inicio, fecha_fin);
+
+        const registros = await dbAllP(
+            db,
+            `SELECT id, fecha, hora, movimiento, turno
+             FROM asistencia
+             WHERE empleado_id = ?
+             AND fecha IN (${fechasEnRango.map(() => '?').join(',')})
+             ORDER BY fecha ASC, hora ASC`,
+            [empleado_id, ...fechasEnRango]
+        );
+
+        const descuentosRow = await dbGetP(
+            db,
+            `SELECT COALESCE(SUM(monto), 0) as total_descuentos
+             FROM descuentos_varios
+             WHERE empleado_id = ? AND fecha_inicio = ? AND fecha_fin = ?`,
+            [empleado_id, fecha_inicio, fecha_fin]
+        );
+        const descuentosVarios = descuentosRow ? descuentosRow.total_descuentos : 0;
+
+        const vacaciones = await dbAllP(
+            db,
+            `SELECT fecha_inicio, fecha_fin, dias, año FROM vacaciones WHERE empleado_id = ?`,
+            [empleado_id]
+        );
+        const vacacionesArray = filtrarVacacionesSolapadas(vacaciones, fecha_inicio, fecha_fin);
+
+        const calculo = calcularSueldoSemanal(
+            registros,
+            sueldoBase,
+            pagoPorHora,
+            fecha_inicio,
+            fecha_fin,
+            descuentosVarios,
+            vacacionesArray,
+            empleado.nombre,
+            empleado.apellido
+        );
+
+        const desgloseJSON = JSON.stringify({
+            empleado: `${empleado.nombre} ${empleado.apellido}`,
+            periodo: { fecha_inicio, fecha_fin },
+            sueldo_base: sueldoBase,
+            pago_por_hora: pagoPorHora,
+            ...calculo
+        });
+
+        await dbRunP(db, 'BEGIN IMMEDIATE');
+        try {
+            const insert = await dbRunP(
+                db,
+                `INSERT INTO pagos (empleado_id, fecha_inicio, fecha_fin, area, sueldo_base, total_pagado, desglose)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                [empleado_id, fecha_inicio, fecha_fin, null, sueldoBase, calculo.total, desgloseJSON]
+            );
+
+            await dbRunP(
+                db,
+                `DELETE FROM descuentos_varios
+                 WHERE empleado_id = ? AND fecha_inicio = ? AND fecha_fin = ?`,
+                [empleado_id, fecha_inicio, fecha_fin]
+            );
+
+            await dbRunP(db, 'COMMIT');
+
+            return res.json({
+                success: true,
+                message: `Pago registrado para ${empleado.nombre} ${empleado.apellido}`,
+                pago_id: insert.lastID,
+                total_pagado: calculo.total
+            });
+        } catch (txErr) {
+            try {
+                await dbRunP(db, 'ROLLBACK');
+            } catch (rollbackErr) {
+                console.error('Error en ROLLBACK de pago:', rollbackErr);
+            }
+            throw txErr;
+        }
+    } catch (err) {
+        console.error('Error al pagar sueldo:', err);
+        if (String(err.message || '').includes('UNIQUE constraint')) {
+            return res.status(409).json({
+                success: false,
+                message: 'Este período ya fue pagado. Revisa el historial de pagos.'
+            });
+        }
+        return res.status(500).json({
+            success: false,
+            message: 'Error al registrar pago: ' + err.message
+        });
+    } finally {
+        locksPago.delete(lockKey);
+    }
 });
 
 module.exports = router;

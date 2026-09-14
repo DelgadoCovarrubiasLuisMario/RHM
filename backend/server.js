@@ -37,15 +37,17 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/index.html'));
 });
 
+const { requireAdmin } = require('./routes/auth');
+
 // API Routes
 app.use('/api/asistencia', require('./routes/asistencia'));
 app.use('/api/auth', require('./routes/auth'));
-app.use('/api/sueldos', require('./routes/sueldos'));
-app.use('/api/pagos', require('./routes/pagos'));
+app.use('/api/sueldos', requireAdmin, require('./routes/sueldos'));
+app.use('/api/pagos', requireAdmin, require('./routes/pagos'));
 app.use('/api/empleados', require('./routes/empleados'));
-app.use('/api/uniformes', require('./routes/uniformes'));
-app.use('/api/vacaciones', require('./routes/vacaciones'));
-app.use('/api/produccion', require('./routes/produccion'));
+app.use('/api/uniformes', requireAdmin, require('./routes/uniformes'));
+app.use('/api/vacaciones', requireAdmin, require('./routes/vacaciones'));
+app.use('/api/produccion', requireAdmin, require('./routes/produccion'));
 
 // Manejo de errores para rutas API
 app.use('/api/*', (req, res, next) => {
@@ -64,117 +66,6 @@ app.use((err, req, res, next) => {
         next(err);
     }
 });
-
-// Función para limpiar registros antiguos (más de 60 días)
-function limpiarRegistrosAntiguos() {
-    const db = getDB();
-    if (!db) {
-        console.log('⚠️ Base de datos no inicializada, no se pueden limpiar registros');
-        return;
-    }
-
-    try {
-        // Calcular fecha límite (60 días atrás)
-        const fechaLimite = new Date();
-        fechaLimite.setDate(fechaLimite.getDate() - 60);
-        
-        // Formatear fecha en formato DD/MM/YYYY para comparación
-        const dia = String(fechaLimite.getDate()).padStart(2, '0');
-        const mes = String(fechaLimite.getMonth() + 1).padStart(2, '0');
-        const año = fechaLimite.getFullYear();
-        const fechaLimiteStr = `${dia}/${mes}/${año}`;
-
-        // Función auxiliar para comparar fechas DD/MM/YYYY
-        // Retorna true si fecha1 < fecha2
-        function compararFechas(fecha1, fecha2) {
-            const [d1, m1, a1] = fecha1.split('/').map(Number);
-            const [d2, m2, a2] = fecha2.split('/').map(Number);
-            if (a1 !== a2) return a1 < a2;
-            if (m1 !== m2) return m1 < m2;
-            return d1 < d2;
-        }
-
-        // Limpiar asistencia (usando fecha en formato DD/MM/YYYY)
-        db.all(`SELECT id, fecha FROM asistencia`, [], (err, registros) => {
-            if (err) {
-                console.error('Error al obtener registros de asistencia:', err);
-                return;
-            }
-            const idsAEliminar = registros
-                .filter(reg => compararFechas(reg.fecha, fechaLimiteStr))
-                .map(reg => reg.id);
-            
-            if (idsAEliminar.length > 0) {
-                const placeholders = idsAEliminar.map(() => '?').join(',');
-                db.run(
-                    `DELETE FROM asistencia WHERE id IN (${placeholders})`,
-                    idsAEliminar,
-                    function(err) {
-                        if (err) {
-                            console.error('Error al limpiar registros de asistencia:', err);
-                        } else {
-                            console.log(`🧹 Limpieza automática: ${this.changes} registro(s) de asistencia eliminado(s) (más de 60 días)`);
-                        }
-                    }
-                );
-            }
-        });
-
-        // Limpiar pagos (usando fecha_inicio en formato DD/MM/YYYY)
-        db.all(`SELECT id, fecha_inicio FROM pagos`, [], (err, registros) => {
-            if (err) {
-                console.error('Error al obtener registros de pagos:', err);
-                return;
-            }
-            const idsAEliminar = registros
-                .filter(reg => compararFechas(reg.fecha_inicio, fechaLimiteStr))
-                .map(reg => reg.id);
-            
-            if (idsAEliminar.length > 0) {
-                const placeholders = idsAEliminar.map(() => '?').join(',');
-                db.run(
-                    `DELETE FROM pagos WHERE id IN (${placeholders})`,
-                    idsAEliminar,
-                    function(err) {
-                        if (err) {
-                            console.error('Error al limpiar registros de pagos:', err);
-                        } else {
-                            console.log(`🧹 Limpieza automática: ${this.changes} registro(s) de pagos eliminado(s) (más de 60 días)`);
-                        }
-                    }
-                );
-            }
-        });
-
-        // Limpiar producción (bonos) (usando fecha en formato DD/MM/YYYY)
-        db.all(`SELECT id, fecha FROM produccion_trituracion`, [], (err, registros) => {
-            if (err) {
-                console.error('Error al obtener registros de producción:', err);
-                return;
-            }
-            const idsAEliminar = registros
-                .filter(reg => compararFechas(reg.fecha, fechaLimiteStr))
-                .map(reg => reg.id);
-            
-            if (idsAEliminar.length > 0) {
-                const placeholders = idsAEliminar.map(() => '?').join(',');
-                db.run(
-                    `DELETE FROM produccion_trituracion WHERE id IN (${placeholders})`,
-                    idsAEliminar,
-                    function(err) {
-                        if (err) {
-                            console.error('Error al limpiar registros de producción:', err);
-                        } else {
-                            console.log(`🧹 Limpieza automática: ${this.changes} registro(s) de producción eliminado(s) (más de 60 días)`);
-                        }
-                    }
-                );
-            }
-        });
-    } catch (error) {
-        console.error('Error en limpieza automática:', error);
-    }
-}
 
 // Función para cerrar jornadas automáticamente (proceso periódico)
 function cerrarJornadasPendientes() {
@@ -204,13 +95,8 @@ function cerrarJornadasPendientes() {
 
 function iniciarTareasPeriodicas() {
     setTimeout(() => {
-        limpiarRegistrosAntiguos();
         cerrarJornadasPendientes();
     }, 5000);
-
-    setInterval(() => {
-        limpiarRegistrosAntiguos();
-    }, 24 * 60 * 60 * 1000);
 
     setInterval(() => {
         cerrarJornadasPendientes();
@@ -252,7 +138,9 @@ if (USE_HTTPS) {
         http.createServer((req, res) => {
             const hostHeader = req.headers.host || `localhost:${HTTP_REDIRECT_PORT}`;
             const hostname = hostHeader.replace(/:\d+$/, '');
-            const location = `https://${hostname}:${PORT}${req.url || '/'}`;
+            const publicPort = process.env.PUBLIC_HTTPS_PORT || (String(PORT) === '443' ? '' : String(PORT));
+            const portPart = publicPort && publicPort !== '443' ? `:${publicPort}` : '';
+            const location = `https://${hostname}${portPart}${req.url || '/'}`;
             res.writeHead(302, { Location: location });
             res.end();
         }).listen(HTTP_REDIRECT_PORT, '0.0.0.0', () => {

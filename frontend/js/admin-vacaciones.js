@@ -99,7 +99,7 @@ function abrirModalRegistrar() {
     
     // Establecer fecha de hoy por defecto en ambos campos (usar setTimeout para asegurar que el reset se complete)
     setTimeout(() => {
-        const hoy = new Date().toISOString().split('T')[0];
+        const hoy = window.fechaISOLocal(new Date());
         fechaInicioInput.value = hoy;
         fechaFinInput.value = hoy;
     }, 10);

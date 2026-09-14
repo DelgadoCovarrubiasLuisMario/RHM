@@ -46,10 +46,13 @@ async function cargarPagos() {
 }
 
 // Mostrar lista de pagos
+let pagosEnPantalla = {};
+
 function mostrarPagos(pagos, area) {
     // Ya no separamos por área, siempre usar Planta
     const listaDiv = document.getElementById('listaPagosPlanta');
     const countDiv = document.getElementById('countPlanta');
+    pagosEnPantalla = {};
 
     // Actualizar contador
     countDiv.textContent = `${pagos.length} pago${pagos.length !== 1 ? 's' : ''}`;
@@ -62,6 +65,7 @@ function mostrarPagos(pagos, area) {
     let html = '<div class="pagos-table">';
 
     pagos.forEach(pago => {
+        pagosEnPantalla[pago.id] = pago;
         const fechaPago = new Date(pago.fecha_pago);
         const fechaFormateada = fechaPago.toLocaleDateString('es-MX', {
             day: '2-digit',
@@ -88,7 +92,7 @@ function mostrarPagos(pagos, area) {
                     <span class="periodo-value">${pago.fecha_inicio} al ${pago.fecha_fin}</span>
                     <span class="sueldo-base">Sueldo base: $${pago.sueldo_base}</span>
                 </div>
-                <button class="btn btn-primary btn-ver-detalle" onclick="verDetalle(${pago.id})" data-pago='${JSON.stringify(pago).replace(/'/g, "\\'")}'>
+                <button type="button" class="btn btn-primary btn-ver-detalle" data-pago-id="${pago.id}">
                     Ver Detalle Completo
                 </button>
             </div>
@@ -99,6 +103,10 @@ function mostrarPagos(pagos, area) {
     html += `<div class="total-registros">Total: ${pagos.length} pago(s)</div>`;
 
     listaDiv.innerHTML = html;
+
+    listaDiv.querySelectorAll('.btn-ver-detalle').forEach((boton) => {
+        boton.addEventListener('click', () => verDetalle(Number(boton.dataset.pagoId)));
+    });
 }
 
 // Ver detalle completo de un pago
@@ -106,11 +114,11 @@ function verDetalle(pagoId) {
     const modal = document.getElementById('modalDetalle');
     const modalTitulo = document.getElementById('modalTitulo');
     const modalBody = document.getElementById('modalBody');
-    
-    // Obtener datos del botón que fue clickeado
-    const boton = event.target.closest('.btn-ver-detalle');
-    const datosPago = JSON.parse(boton.getAttribute('data-pago'));
-    
+    const datosPago = pagosEnPantalla[pagoId];
+    if (!datosPago) {
+        return;
+    }
+
     try {
         const desglose = JSON.parse(datosPago.desglose);
         

@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { getDB } = require('../database/db');
+const { claveFechaOrden } = require('../lib/fechas');
+const { diasVacacionesAnuales, esFestivoOficial, formatearDdMmYyyy } = require('../lib/laboral');
 
 // Listar todas las vacaciones
 router.get('/listar', (req, res) => {
@@ -19,7 +21,8 @@ router.get('/listar', (req, res) => {
             v.creado_en,
             e.nombre || ' ' || e.apellido as nombre_empleado,
             e.codigo as codigo_empleado,
-            COALESCE(e.dias_vacaciones_anuales, 12) as dias_totales,
+            COALESCE(e.dias_vacaciones_anuales, 12) as dias_manual,
+            e.fecha_ingreso,
             COALESCE((
                 SELECT SUM(v2.dias)
                 FROM vacaciones v2
@@ -31,18 +34,7 @@ router.get('/listar', (req, res) => {
         WHERE 1=1
     `;
     const params = [];
-
-    if (fecha_desde) {
-        query += ' AND v.fecha_inicio >= ?';
-        params.push(fecha_desde);
-    }
-
-    if (fecha_hasta) {
-        query += ' AND v.fecha_fin <= ?';
-        params.push(fecha_hasta);
-    }
-
-    query += ' ORDER BY v.fecha_inicio DESC, v.creado_en DESC LIMIT 500';
+    query += ' ORDER BY v.creado_en DESC LIMIT 2000';
 
     db.all(query, params, (err, vacaciones) => {
         if (err) {
@@ -52,8 +44,18 @@ router.get('/listar', (req, res) => {
             });
         }
 
-        const data = vacaciones.map(vac => {
-            const diasTotales = Math.max(0, Math.min(365, parseInt(vac.dias_totales, 10) || 12));
+        let filtradas = vacaciones || [];
+        if (fecha_desde) {
+            const desde = claveFechaOrden(fecha_desde);
+            filtradas = filtradas.filter((v) => claveFechaOrden(v.fecha_inicio) >= desde);
+        }
+        if (fecha_hasta) {
+            const hasta = claveFechaOrden(fecha_hasta);
+            filtradas = filtradas.filter((v) => claveFechaOrden(v.fecha_fin) <= hasta);
+        }
+
+        const data = filtradas.slice(0, 500).map(vac => {
+            const diasTotales = diasVacacionesAnuales(vac.fecha_ingreso, vac.dias_manual);
             const diasUsados = Math.max(0, parseInt(vac.dias_usados, 10) || 0);
             return {
                 ...vac,
@@ -111,7 +113,7 @@ router.get('/empleado/:empleado_id/disponibles', (req, res) => {
     const añoActual = año || new Date().getFullYear();
 
     db.get(
-        `SELECT COALESCE(e.dias_vacaciones_anuales, 12) as dias_totales
+        `SELECT COALESCE(e.dias_vacaciones_anuales, 12) as dias_manual, e.fecha_ingreso
          FROM empleados e WHERE e.id = ?`,
         [empleado_id],
         (errEmp, empRow) => {
@@ -125,7 +127,7 @@ router.get('/empleado/:empleado_id/disponibles', (req, res) => {
                 return res.status(404).json({ success: false, message: 'Empleado no encontrado' });
             }
 
-            const diasTotales = Math.max(0, Math.min(365, parseInt(empRow.dias_totales, 10) || 12));
+            const diasTotales = diasVacacionesAnuales(empRow.fecha_ingreso, empRow.dias_manual);
 
             db.all(
                 `SELECT COALESCE(SUM(dias), 0) as dias_usados
@@ -172,7 +174,7 @@ function calcularDiasEntreFechas(fechaInicio, fechaFin) {
     while (fechaActual <= fin) {
         // getDay() retorna 0 para domingo, 1 para lunes, etc.
         // Si no es domingo (getDay() !== 0), contar el día
-        if (fechaActual.getDay() !== 0) {
+        if (fechaActual.getDay() !== 0 && !esFestivoOficial(formatearDdMmYyyy(fechaActual))) {
             diasContados++;
         }
         
@@ -246,7 +248,7 @@ router.post('/registrar', (req, res) => {
     const insertPromises = empleados_ids.map(empleado_id => {
         return new Promise((resolve, reject) => {
             // Verificar que el empleado existe
-            db.get('SELECT id, nombre, apellido, COALESCE(dias_vacaciones_anuales, 12) as dias_totales FROM empleados WHERE id = ?', 
+            db.get('SELECT id, nombre, apellido, COALESCE(dias_vacaciones_anuales, 12) as dias_manual, fecha_ingreso FROM empleados WHERE id = ?', 
                 [empleado_id], 
                 (err, empleado) => {
                     if (err) {
@@ -257,7 +259,7 @@ router.post('/registrar', (req, res) => {
                         return reject(`Empleado con ID ${empleado_id} no encontrado`);
                     }
 
-                    const diasTotalesPermitidos = Math.max(0, Math.min(365, parseInt(empleado.dias_totales, 10) || 12));
+                    const diasTotalesPermitidos = diasVacacionesAnuales(empleado.fecha_ingreso, empleado.dias_manual);
 
                     // Validar solapamiento
                     validarSolapamiento(db, empleado_id, fecha_inicio, fecha_fin, (err) => {

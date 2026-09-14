@@ -134,9 +134,15 @@
                     </div>
 
                     <div class="form-group">
+                        <label for="empleadoFechaIngreso">Fecha de ingreso</label>
+                        <input type="date" id="empleadoFechaIngreso">
+                        <small class="help-text">Con esta fecha el tope de vacaciones sube solo según la LFT (12, 14, 16…).</small>
+                    </div>
+
+                    <div class="form-group">
                         <label for="empleadoDiasVacaciones">Días de vacaciones al año (por empleado)</label>
                         <input type="number" id="empleadoDiasVacaciones" min="0" max="365" step="1" value="12" title="Ajusta según antigüedad o política (12 por defecto)">
-                        <small class="help-text">Se usa para el tope de vacaciones de este empleado. Edita y guarda al crear o con “Editar”.</small>
+                        <small class="help-text">Si la ley da más por antigüedad, se usa el mayor de los dos. No bajes de lo legal.</small>
                     </div>
                     
                     <div class="form-group">

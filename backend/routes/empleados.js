@@ -3,6 +3,32 @@ const router = express.Router();
 const QRCode = require('qrcode');
 const crypto = require('crypto');
 const { getDB } = require('../database/db');
+const { requireAdmin, requestEsAdmin } = require('./auth');
+const { normalizarFechaIngreso } = require('../lib/laboral');
+
+function proyectarEmpleadoKiosco(emp) {
+    return {
+        id: emp.id,
+        codigo: emp.codigo,
+        nombre: emp.nombre,
+        apellido: emp.apellido,
+        cargo: emp.cargo,
+        activo: emp.activo
+    };
+}
+
+function proyectarCargosKiosco(emp) {
+    return {
+        id: emp.id,
+        codigo: emp.codigo,
+        nombre: emp.nombre,
+        apellido: emp.apellido,
+        cargo: emp.cargo,
+        vence_induccion: emp.vence_induccion,
+        mandar_a_curso: emp.mandar_a_curso,
+        vigencia_de: emp.vigencia_de
+    };
+}
 
 // Función para generar código único
 function generarCodigo(nombre, apellido) {
@@ -16,7 +42,7 @@ router.get('/listar', (req, res) => {
 
     db.all(
         `SELECT id, codigo, nombre, apellido, email, telefono, sueldo_base, activo, foto, COALESCE(cargo, 'Desconocido') as cargo,
-                COALESCE(dias_vacaciones_anuales, 12) as dias_vacaciones_anuales
+                COALESCE(dias_vacaciones_anuales, 12) as dias_vacaciones_anuales, fecha_ingreso
          FROM empleados 
          WHERE activo = 1
          ORDER BY nombre, apellido`,
@@ -29,10 +55,14 @@ router.get('/listar', (req, res) => {
                 });
             }
 
+            const data = requestEsAdmin(req)
+                ? empleados
+                : empleados.map(proyectarEmpleadoKiosco);
+
             res.json({
                 success: true,
-                data: empleados,
-                total: empleados.length
+                data,
+                total: data.length
             });
         }
     );
@@ -72,14 +102,20 @@ router.get('/listar-con-cargos', (req, res) => {
                 });
             }
 
+            const data = requestEsAdmin(req)
+                ? empleados
+                : empleados.map(proyectarCargosKiosco);
+
             res.json({
                 success: true,
-                data: empleados,
-                total: empleados.length
+                data,
+                total: data.length
             });
         }
     );
 });
+
+router.use(requireAdmin);
 
 // Obtener un empleado por ID
 router.get('/:empleado_id', (req, res) => {
@@ -88,7 +124,7 @@ router.get('/:empleado_id', (req, res) => {
 
     db.get(
         `SELECT id, codigo, nombre, apellido, email, telefono, sueldo_base, activo, foto, COALESCE(cargo, 'Desconocido') as cargo,
-                COALESCE(dias_vacaciones_anuales, 12) as dias_vacaciones_anuales
+                COALESCE(dias_vacaciones_anuales, 12) as dias_vacaciones_anuales, fecha_ingreso
          FROM empleados 
          WHERE id = ?`,
         [empleado_id],
@@ -117,7 +153,7 @@ router.get('/:empleado_id', (req, res) => {
 
 // Crear nuevo empleado
 router.post('/', (req, res) => {
-    const { nombre, apellido, email, telefono, sueldo_base, cargo, foto, dias_vacaciones_anuales } = req.body;
+    const { nombre, apellido, email, telefono, sueldo_base, cargo, foto, dias_vacaciones_anuales, fecha_ingreso } = req.body;
     const db = getDB();
 
     // Validar campos requeridos
@@ -148,11 +184,19 @@ router.post('/', (req, res) => {
         }
     }
 
+    const fechaIngresoNorm = normalizarFechaIngreso(fecha_ingreso);
+    if (fechaIngresoNorm === false) {
+        return res.status(400).json({
+            success: false,
+            message: 'fecha_ingreso inválida. Usa DD/MM/YYYY o YYYY-MM-DD'
+        });
+    }
+
     // Insertar empleado
     db.run(
-        `INSERT INTO empleados (codigo, nombre, apellido, email, telefono, sueldo_base, cargo, activo, foto, dias_vacaciones_anuales)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [codigo, nombre.trim(), apellido.trim(), null, null, sueldoBase, cargo || null, 1, foto || null, diasVac],
+        `INSERT INTO empleados (codigo, nombre, apellido, email, telefono, sueldo_base, cargo, activo, foto, dias_vacaciones_anuales, fecha_ingreso)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [codigo, nombre.trim(), apellido.trim(), null, null, sueldoBase, cargo || null, 1, foto || null, diasVac, fechaIngresoNorm || null],
         function(err) {
             if (err) {
                 if (err.message.includes('UNIQUE constraint failed')) {
@@ -186,7 +230,7 @@ router.post('/', (req, res) => {
 // Actualizar empleado
 router.put('/:empleado_id', (req, res) => {
     const { empleado_id } = req.params;
-    const { nombre, apellido, email, telefono, sueldo_base, cargo, activo, foto, dias_vacaciones_anuales } = req.body;
+    const { nombre, apellido, email, telefono, sueldo_base, cargo, activo, foto, dias_vacaciones_anuales, fecha_ingreso } = req.body;
     const db = getDB();
 
     // Validar que el empleado existe
@@ -252,6 +296,17 @@ router.put('/:empleado_id', (req, res) => {
                 }
                 updates.push('dias_vacaciones_anuales = ?');
                 values.push(d);
+            }
+            if (fecha_ingreso !== undefined) {
+                const fechaIngresoNorm = normalizarFechaIngreso(fecha_ingreso);
+                if (fechaIngresoNorm === false) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'fecha_ingreso inválida. Usa DD/MM/YYYY o YYYY-MM-DD'
+                    });
+                }
+                updates.push('fecha_ingreso = ?');
+                values.push(fechaIngresoNorm);
             }
 
             if (updates.length === 0) {

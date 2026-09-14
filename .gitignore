@@ -5,6 +5,9 @@ package-lock.json
 # Database
 database/*.db
 database/*.db-journal
+database/*.db-wal
+database/*.db-shm
+database/.admin-secret
 
 # Environment variables
 .env

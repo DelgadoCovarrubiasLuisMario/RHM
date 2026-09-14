@@ -13,6 +13,16 @@ document.addEventListener('DOMContentLoaded', function() {
 // Variable global para almacenar todos los empleados
 let todosLosEmpleados = [];
 
+function fechaIngresoAIso(fecha) {
+    if (!fecha) return '';
+    const texto = String(fecha).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(texto)) return texto;
+    const partes = texto.split('/');
+    if (partes.length !== 3) return '';
+    const [dia, mes, año] = partes;
+    return `${año}-${mes}-${dia}`;
+}
+
 // Cargar todos los empleados
 async function cargarEmpleados() {
     const listaEmpleados = document.getElementById('listaEmpleadosPlanta');
@@ -249,15 +259,9 @@ function abrirModalDescuento(empleadoId, nombreEmpleado) {
     document.getElementById('empleadoNombreDescuento').value = nombreEmpleado;
     document.getElementById('modalTituloDescuento').textContent = `Agregar Descuento - ${nombreEmpleado}`;
     
-    // Establecer semana actual por defecto
-    const hoy = new Date();
-    const lunes = new Date(hoy);
-    lunes.setDate(hoy.getDate() - hoy.getDay() + 1);
-    const domingo = new Date(lunes);
-    domingo.setDate(lunes.getDate() + 6);
-
-    document.getElementById('fechaInicioDescuento').value = lunes.toISOString().split('T')[0];
-    document.getElementById('fechaFinDescuento').value = domingo.toISOString().split('T')[0];
+    const semana = window.periodoSemanaISO(new Date());
+    document.getElementById('fechaInicioDescuento').value = semana.inicio;
+    document.getElementById('fechaFinDescuento').value = semana.fin;
     
     // Limpiar formulario
     document.getElementById('montoDescuento').value = '';
@@ -441,10 +445,10 @@ window.onclick = function(event) {
 document.getElementById('fechaInicioDescuento')?.addEventListener('change', function() {
     const fechaInicio = this.value;
     if (fechaInicio) {
-        const inicio = new Date(fechaInicio);
+        const inicio = new Date(`${fechaInicio}T00:00:00`);
         const fin = new Date(inicio);
-        fin.setDate(inicio.getDate() + 6); // 7 días (semana completa)
-        document.getElementById('fechaFinDescuento').value = fin.toISOString().split('T')[0];
+        fin.setDate(inicio.getDate() + 6);
+        document.getElementById('fechaFinDescuento').value = window.fechaISOLocal(fin);
     }
 });
 
@@ -460,6 +464,7 @@ function abrirModalEmpleado() {
     document.getElementById('empleadoId').value = '';
     document.getElementById('empleadoSueldo').value = '2000';
     document.getElementById('empleadoDiasVacaciones').value = '12';
+    document.getElementById('empleadoFechaIngreso').value = '';
     eliminarFotoPreview(); // Limpiar foto
     
     titulo.textContent = 'Agregar Empleado';
@@ -495,6 +500,7 @@ async function editarEmpleado(empleadoId) {
                 empleado.dias_vacaciones_anuales !== undefined && empleado.dias_vacaciones_anuales !== null
                     ? empleado.dias_vacaciones_anuales
                     : 12;
+            document.getElementById('empleadoFechaIngreso').value = fechaIngresoAIso(empleado.fecha_ingreso);
 
             // Mostrar foto si existe
             if (empleado.foto) {
@@ -526,6 +532,7 @@ async function guardarEmpleado(e) {
     const sueldo = document.getElementById('empleadoSueldo').value;
     const diasVacRaw = document.getElementById('empleadoDiasVacaciones').value;
     const diasVacaciones = parseInt(diasVacRaw, 10);
+    const fechaIngreso = document.getElementById('empleadoFechaIngreso').value;
 
     if (!nombre || !apellido || !sueldo) {
         alert('❌ Por favor completa los campos requeridos (Nombre, Apellido, Sueldo Base)');
@@ -555,7 +562,8 @@ async function guardarEmpleado(e) {
         cargo: (cargo && cargo.trim()) ? cargo.trim() : null,
         sueldo_base: sueldoNum,
         foto: fotoBase64,
-        dias_vacaciones_anuales: diasVacaciones
+        dias_vacaciones_anuales: diasVacaciones,
+        fecha_ingreso: fechaIngreso || null
     };
 
     try {

@@ -1,24 +1,20 @@
 // Inicializar página
 document.addEventListener('DOMContentLoaded', function() {
-    // Establecer semana actual por defecto
-    const hoy = new Date();
-    const lunes = new Date(hoy);
-    lunes.setDate(hoy.getDate() - hoy.getDay() + 1);
-    const domingo = new Date(lunes);
-    domingo.setDate(lunes.getDate() + 6);
-
-    document.getElementById('filtroFechaInicio').value = lunes.toISOString().split('T')[0];
-    document.getElementById('filtroFechaFin').value = domingo.toISOString().split('T')[0];
+    const semana = window.periodoSemanaISO ? window.periodoSemanaISO(new Date()) : null;
+    if (semana) {
+        document.getElementById('filtroFechaInicio').value = semana.inicio;
+        document.getElementById('filtroFechaFin').value = semana.fin;
+    }
 });
 
 // Actualizar fecha fin cuando cambia fecha inicio (para mantener semana completa)
 function actualizarFechaFin() {
     const fechaInicio = document.getElementById('filtroFechaInicio').value;
     if (fechaInicio) {
-        const inicio = new Date(fechaInicio);
+        const inicio = new Date(`${fechaInicio}T00:00:00`);
         const fin = new Date(inicio);
-        fin.setDate(inicio.getDate() + 6); // 7 días (semana completa)
-        document.getElementById('filtroFechaFin').value = fin.toISOString().split('T')[0];
+        fin.setDate(inicio.getDate() + 6);
+        document.getElementById('filtroFechaFin').value = window.fechaISOLocal(fin);
     }
 }
 
@@ -61,11 +57,22 @@ async function cargarSueldos() {
     }
 }
 
+let sueldosEnPantalla = {};
+
+function escapeHtml(texto) {
+    return String(texto || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
 // Mostrar lista de sueldos
 function mostrarSueldos(sueldos, periodo, area) {
     // Ya no separamos por área, siempre usar Planta
     const listaDiv = document.getElementById('listaSueldosPlanta');
     const countDiv = document.getElementById('countPlanta');
+    sueldosEnPantalla = {};
 
     // Actualizar contador
     countDiv.textContent = `${sueldos.length} empleado${sueldos.length !== 1 ? 's' : ''}`;
@@ -82,16 +89,18 @@ function mostrarSueldos(sueldos, periodo, area) {
     html += '<div class="sueldos-table">';
 
     sueldos.forEach(sueldo => {
+        sueldosEnPantalla[sueldo.empleado_id] = sueldo;
         html += `
             <div class="sueldo-item">
                 <div class="sueldo-header">
                     <div class="empleado-info">
-                        <strong>${sueldo.empleado}</strong>
+                        <strong>${escapeHtml(sueldo.empleado)}</strong>
                         <span class="sueldo-base">Sueldo base: $${sueldo.sueldo_base}</span>
                     </div>
                     <div class="sueldo-total">
                         <span class="total-label">Total:</span>
                         <span class="total-amount">$${parseFloat(sueldo.total).toFixed(2)}</span>
+                        ${sueldo.ya_pagado ? '<span class="sueldo-base">Ya pagado</span>' : ''}
                     </div>
                 </div>
                 <div class="sueldo-resumen">
@@ -116,6 +125,32 @@ function mostrarSueldos(sueldos, periodo, area) {
                         <span class="resumen-detalle">(salida 4:30–6:00 p. m.)</span>
                     </div>
                     ` : ''}
+                    ${parseFloat(sueldo.calculos?.monto_prima_dominical || 0) > 0 ? `
+                    <div class="resumen-item destacado">
+                        <span class="resumen-label">Prima dominical 25%:</span>
+                        <span class="resumen-value">$${sueldo.calculos.monto_prima_dominical}</span>
+                    </div>
+                    ` : ''}
+                    ${parseFloat(sueldo.calculos?.monto_prima_vacacional || 0) > 0 ? `
+                    <div class="resumen-item destacado">
+                        <span class="resumen-label">Prima vacacional 25%:</span>
+                        <span class="resumen-value">$${sueldo.calculos.monto_prima_vacacional}</span>
+                    </div>
+                    ` : ''}
+                    ${parseFloat(sueldo.calculos?.monto_festivo_trabajado || 0) > 0 ? `
+                    <div class="resumen-item destacado">
+                        <span class="resumen-label">Festivo trabajado (×2):</span>
+                        <span class="resumen-value">$${sueldo.calculos.monto_festivo_trabajado}</span>
+                        <span class="resumen-detalle">(${sueldo.resumen.horas_festivo_trabajadas || '0.00'} h)</span>
+                    </div>
+                    ` : ''}
+                    ${(sueldo.resumen?.dias_festivos || 0) > 0 ? `
+                    <div class="resumen-item destacado">
+                        <span class="resumen-label">Festivos pagados:</span>
+                        <span class="resumen-value">${sueldo.resumen.dias_festivos} día(s)</span>
+                        <span class="resumen-detalle">(8 h cada uno, aunque no haya checada)</span>
+                    </div>
+                    ` : ''}
                     ${sueldo.calculos?.descuento_faltas > 0 ? `
                     <div class="resumen-item negativo" style="opacity: 0.7; font-style: italic;">
                         <span class="resumen-label">Descuento Faltas (info):</span>
@@ -131,12 +166,16 @@ function mostrarSueldos(sueldos, periodo, area) {
                     ` : ''}
                 </div>
                 <div class="sueldo-actions">
-                    <button class="btn btn-primary btn-ver-desglose" onclick="verDesglose(${sueldo.empleado_id}, '${sueldo.empleado.replace(/'/g, "\\'")}')" data-sueldo='${JSON.stringify(sueldo).replace(/'/g, "\\'")}'>
+                    <button type="button" class="btn btn-primary btn-ver-desglose" data-empleado-id="${sueldo.empleado_id}">
                         Ver Desglose Completo
                     </button>
-                    <button class="btn btn-success btn-pagar" onclick="pagarEmpleado(${sueldo.empleado_id}, '${sueldo.empleado.replace(/'/g, "\\'")}', '${sueldo.periodo.fecha_inicio}', '${sueldo.periodo.fecha_fin}')">
+                    ${sueldo.ya_pagado ? `
+                    <button type="button" class="btn btn-secondary" disabled>Ya pagado</button>
+                    ` : `
+                    <button type="button" class="btn btn-success btn-pagar" data-empleado-id="${sueldo.empleado_id}">
                         💰 Pagar
                     </button>
+                    `}
                 </div>
             </div>
         `;
@@ -146,19 +185,30 @@ function mostrarSueldos(sueldos, periodo, area) {
     html += `<div class="total-registros">Total: ${sueldos.length} empleados</div>`;
 
     listaDiv.innerHTML = html;
+
+    listaDiv.querySelectorAll('.btn-ver-desglose').forEach((boton) => {
+        boton.addEventListener('click', () => verDesglose(Number(boton.dataset.empleadoId)));
+    });
+    listaDiv.querySelectorAll('.btn-pagar').forEach((boton) => {
+        boton.addEventListener('click', () => {
+            const sueldo = sueldosEnPantalla[boton.dataset.empleadoId];
+            if (!sueldo) return;
+            pagarEmpleado(sueldo.empleado_id, sueldo.empleado, sueldo.periodo.fecha_inicio, sueldo.periodo.fecha_fin);
+        });
+    });
 }
 
 // Ver desglose completo de un empleado
-function verDesglose(empleadoId, nombreEmpleado) {
+function verDesglose(empleadoId) {
     const modal = document.getElementById('modalDesglose');
     const modalTitulo = document.getElementById('modalTitulo');
     const modalBody = document.getElementById('modalBody');
-    
-    // Obtener datos del botón que fue clickeado
-    const boton = event.target.closest('.btn-ver-desglose');
-    const datosSueldo = JSON.parse(boton.getAttribute('data-sueldo'));
+    const datosSueldo = sueldosEnPantalla[empleadoId];
+    if (!datosSueldo) {
+        return;
+    }
 
-    modalTitulo.textContent = `Desglose de Sueldo - ${nombreEmpleado}`;
+    modalTitulo.textContent = `Desglose de Sueldo - ${datosSueldo.empleado}`;
 
     let html = `
         <div class="desglose-header">
@@ -195,7 +245,7 @@ function verDesglose(empleadoId, nombreEmpleado) {
             const turnoLabel = dia.turno === 4 || dia.turno === '4' ? 'Planta' : `Turno ${dia.turno}`;
             html += `
                 <tr class="${dia.es_domingo ? 'domingo-row' : ''}">
-                    <td>${dia.fecha} ${dia.es_domingo ? '🏖️ Domingo' : ''}</td>
+                    <td>${dia.fecha}${dia.es_domingo ? ' 🏖️ Domingo' : ''}${dia.es_festivo ? ` 🇲🇽 ${dia.nombre_festivo || 'Festivo'}` : ''}${dia.es_vacaciones ? ' 🌴 Vacaciones' : ''}${dia.es_descanso_obligatorio ? ' (pagado)' : ''}</td>
                     <td>${turnoLabel}</td>
                     <td>${dia.hora_entrada}</td>
                     <td>${dia.hora_salida}</td>
@@ -246,6 +296,27 @@ function verDesglose(empleadoId, nombreEmpleado) {
                     <span class="calculo-value">${datosSueldo.resumen?.horas_planta_extra || '0.00'}h</span>
                     <span class="calculo-monto">$${datosSueldo.calculos?.monto_horas_planta_extra || '0.00'}</span>
                 </div>
+                ${parseFloat(datosSueldo.calculos?.monto_prima_dominical || 0) > 0 ? `
+                <div class="calculo-item destacado">
+                    <span class="calculo-label">Prima dominical 25%:</span>
+                    <span class="calculo-value">1 día ordinario</span>
+                    <span class="calculo-monto">$${datosSueldo.calculos.monto_prima_dominical}</span>
+                </div>
+                ` : ''}
+                ${parseFloat(datosSueldo.calculos?.monto_prima_vacacional || 0) > 0 ? `
+                <div class="calculo-item destacado">
+                    <span class="calculo-label">Prima vacacional 25%:</span>
+                    <span class="calculo-value">${datosSueldo.resumen?.dias_vacaciones || 0} día(s)</span>
+                    <span class="calculo-monto">$${datosSueldo.calculos.monto_prima_vacacional}</span>
+                </div>
+                ` : ''}
+                ${parseFloat(datosSueldo.calculos?.monto_festivo_trabajado || 0) > 0 ? `
+                <div class="calculo-item destacado">
+                    <span class="calculo-label">Festivo trabajado (×2):</span>
+                    <span class="calculo-value">${datosSueldo.resumen?.horas_festivo_trabajadas || '0.00'}h</span>
+                    <span class="calculo-monto">$${datosSueldo.calculos.monto_festivo_trabajado}</span>
+                </div>
+                ` : ''}
                 ${datosSueldo.calculos?.descuento_faltas > 0 ? `
                 <div class="calculo-item negativo" style="opacity: 0.7; font-style: italic;">
                     <span class="calculo-label">Descuento por Faltas (información):</span>
@@ -291,23 +362,26 @@ window.onclick = function(event) {
 
 // Limpiar filtros
 function limpiarFiltros() {
-    const hoy = new Date();
-    const lunes = new Date(hoy);
-    lunes.setDate(hoy.getDate() - hoy.getDay() + 1);
-    const domingo = new Date(lunes);
-    domingo.setDate(lunes.getDate() + 6);
-
-    document.getElementById('filtroFechaInicio').value = lunes.toISOString().split('T')[0];
-    document.getElementById('filtroFechaFin').value = domingo.toISOString().split('T')[0];
-    document.getElementById('listaSueldos').innerHTML = '<div class="loading">Selecciona un rango de fechas y haz clic en "Calcular Sueldos"</div>';
+    const semana = window.periodoSemanaISO(new Date());
+    document.getElementById('filtroFechaInicio').value = semana.inicio;
+    document.getElementById('filtroFechaFin').value = semana.fin;
+    const lista = document.getElementById('listaSueldosPlanta') || document.getElementById('listaSueldos');
+    if (lista) {
+        lista.innerHTML = '<div class="loading">Selecciona un rango de fechas y haz clic en "Calcular Sueldos"</div>';
+    }
 }
 
-// Pagar empleado
+let pagandoEmpleado = false;
+
 async function pagarEmpleado(empleadoId, nombreEmpleado, fechaInicio, fechaFin) {
-    if (!confirm(`¿Estás seguro de pagar a ${nombreEmpleado}?\n\nPeríodo: ${fechaInicio} al ${fechaFin}\n\nEsta acción eliminará los registros de asistencia y descuentos de este período.`)) {
+    if (pagandoEmpleado) {
+        return;
+    }
+    if (!confirm(`¿Estás seguro de pagar a ${nombreEmpleado}?\n\nPeríodo: ${fechaInicio} al ${fechaFin}\n\nSe guarda en historial. Las checadas se conservan.`)) {
         return;
     }
 
+    pagandoEmpleado = true;
     try {
         const apiURL = window.API_CONFIG ? window.API_CONFIG.getBaseURL() : 'http://localhost:3000';
         const response = await fetch(`${apiURL}/api/sueldos/pagar/${empleadoId}`, {
@@ -325,7 +399,6 @@ async function pagarEmpleado(empleadoId, nombreEmpleado, fechaInicio, fechaFin) 
 
         if (data.success) {
             alert(`✅ ${data.message}\n\nTotal pagado: $${parseFloat(data.total_pagado).toFixed(2)}`);
-            // Recargar la lista de sueldos
             cargarSueldos();
         } else {
             alert(`❌ Error: ${data.message}`);
@@ -333,6 +406,8 @@ async function pagarEmpleado(empleadoId, nombreEmpleado, fechaInicio, fechaFin) 
     } catch (error) {
         console.error('Error:', error);
         alert('❌ Error de conexión. Verifica que el servidor esté corriendo.');
+    } finally {
+        pagandoEmpleado = false;
     }
 }
 

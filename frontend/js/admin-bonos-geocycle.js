@@ -14,7 +14,7 @@ function getAPIBase() {
 document.addEventListener('DOMContentLoaded', () => {
     // Establecer fecha de hoy por defecto
     const hoy = new Date();
-    const fechaStr = hoy.toISOString().split('T')[0];
+    const fechaStr = window.fechaISOLocal(hoy);
     document.getElementById('fechaRegistro').value = fechaStr;
 
     // Establecer mes actual por defecto

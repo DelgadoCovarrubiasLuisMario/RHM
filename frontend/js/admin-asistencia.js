@@ -1,7 +1,7 @@
 // Inicializar página
 document.addEventListener('DOMContentLoaded', function() {
     // Establecer fechas por defecto (hoy)
-    const hoy = new Date().toISOString().split('T')[0];
+    const hoy = window.fechaISOLocal(new Date());
     document.getElementById('filtroFechaInicio').value = hoy;
     document.getElementById('filtroFechaFin').value = hoy;
 
@@ -126,7 +126,7 @@ function mostrarAsistencia(registros, area) {
 
 // Limpiar filtros
 function limpiarFiltros() {
-    const hoy = new Date().toISOString().split('T')[0];
+    const hoy = window.fechaISOLocal(new Date());
     document.getElementById('filtroFechaInicio').value = hoy;
     document.getElementById('filtroFechaFin').value = hoy;
     document.getElementById('filtroMovimiento').value = '';

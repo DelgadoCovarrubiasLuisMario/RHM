@@ -148,20 +148,37 @@ function mostrarListaEmpleadosFiltrada(empleados) {
         return;
     }
     
-    listaEmpleados.innerHTML = empleados.map(emp => `
-        <div class="empleado-item-lista" onclick="seleccionarEmpleado('${emp.codigo}', '${emp.nombre} ${emp.apellido}')">
-            <div class="empleado-nombre-lista">${emp.nombre} ${emp.apellido}</div>
-            <div class="empleado-codigo-lista">${emp.codigo || ''}</div>
-        </div>
-    `).join('');
-    
+    listaEmpleados.innerHTML = '';
+    empleados.forEach((emp) => {
+        const item = document.createElement('div');
+        item.className = 'empleado-item-lista';
+        const nombre = document.createElement('div');
+        nombre.className = 'empleado-nombre-lista';
+        nombre.textContent = `${emp.nombre || ''} ${emp.apellido || ''}`.trim();
+        const codigo = document.createElement('div');
+        codigo.className = 'empleado-codigo-lista';
+        codigo.textContent = emp.codigo || '';
+        item.appendChild(nombre);
+        item.appendChild(codigo);
+        item.addEventListener('click', function () {
+            seleccionarEmpleado(emp.codigo);
+        });
+        listaEmpleados.appendChild(item);
+    });
+
     listaEmpleados.style.display = 'block';
 }
 
-// Seleccionar empleado de la lista
-function seleccionarEmpleado(codigo, nombre) {
+function seleccionarEmpleado(codigo) {
     document.getElementById('codigo').value = codigo;
     document.getElementById('listaEmpleados').style.display = 'none';
+}
+
+function resolverCodigoEmpleado(dato) {
+    if (typeof window.resolverEmpleadoDeLista !== 'function' || !todosLosEmpleados.length) {
+        return { ok: true, empleado: { codigo: String(dato || '').trim() } };
+    }
+    return window.resolverEmpleadoDeLista(todosLosEmpleados, dato);
 }
 
 // Seleccionar movimiento
@@ -366,14 +383,22 @@ document.getElementById('registroForm').addEventListener('submit', async functio
         return;
     }
 
-    const codigo = document.getElementById('codigo').value.trim();
+    const datoEmpleado = document.getElementById('codigo').value.trim();
     const movimiento = document.getElementById('movimiento').value;
     const turno = document.getElementById('turno').value;
     
-    if (!codigo || !movimiento || !turno) {
+    if (!datoEmpleado || !movimiento || !turno) {
         mostrarMensaje('Por favor completa todos los campos requeridos', 'error');
         return;
     }
+
+    const resuelto = resolverCodigoEmpleado(datoEmpleado);
+    if (!resuelto.ok) {
+        mostrarMensaje(`❌ ${resuelto.message}`, 'error');
+        return;
+    }
+    const codigo = resuelto.empleado.codigo;
+    document.getElementById('codigo').value = codigo;
 
     registrando = true;
     const promesaStreamCamara = iniciarPromesaStreamEntrada();

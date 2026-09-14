@@ -19,6 +19,9 @@ function initDatabase() {
             console.error('❌ Error al conectar con la base de datos:', err.message);
         } else {
             console.log('✅ Base de datos SQLite conectada');
+            db.run('PRAGMA journal_mode = WAL');
+            db.run('PRAGMA busy_timeout = 5000');
+            db.run('PRAGMA foreign_keys = ON');
             createTables();
         }
     });
@@ -55,6 +58,7 @@ function createTables() {
             foto TEXT,
             cargo TEXT,
             dias_vacaciones_anuales INTEGER DEFAULT 12,
+            fecha_ingreso TEXT,
             creado_en DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     `, (err) => {
@@ -74,6 +78,9 @@ function createTables() {
                 // Ignorar error si la columna ya existe
             });
             db.run(`ALTER TABLE empleados ADD COLUMN dias_vacaciones_anuales INTEGER DEFAULT 12`, (err) => {
+                // Ignorar error si la columna ya existe
+            });
+            db.run(`ALTER TABLE empleados ADD COLUMN fecha_ingreso TEXT`, (err) => {
                 // Ignorar error si la columna ya existe
             });
         }
@@ -321,6 +328,15 @@ function createTables() {
                     console.error('Error al crear índice pagos fecha:', err);
                 }
             });
+            db.run(
+                `CREATE UNIQUE INDEX IF NOT EXISTS idx_pagos_empleado_periodo
+                 ON pagos(empleado_id, fecha_inicio, fecha_fin)`,
+                (err) => {
+                    if (err) {
+                        console.error('No se pudo crear índice único de pagos (puede haber duplicados previos):', err.message);
+                    }
+                }
+            );
         }
     });
 

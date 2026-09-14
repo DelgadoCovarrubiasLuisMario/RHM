@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('formRegistrar').addEventListener('submit', registrarEntrega);
 
     // Establecer fecha de hoy por defecto
-    const hoy = new Date().toISOString().split('T')[0];
+    const hoy = window.fechaISOLocal(new Date());
     document.getElementById('fechaEntrega').value = hoy;
 });
 
@@ -89,7 +89,7 @@ function abrirModalRegistrar() {
     // Limpiar formulario
     document.getElementById('formRegistrar').reset();
     document.getElementById('busquedaEmpleadosModal').value = '';
-    const hoy = new Date().toISOString().split('T')[0];
+    const hoy = window.fechaISOLocal(new Date());
     document.getElementById('fechaEntrega').value = hoy;
     // Cargar empleados
     cargarEmpleadosModal();
