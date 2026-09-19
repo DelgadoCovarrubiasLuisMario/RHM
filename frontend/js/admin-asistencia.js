@@ -165,8 +165,8 @@ function mostrarAsistencia(registros) {
                     }
                 </div>
                 <div class="asistencia-actions">
-                    <button class="btn btn-danger btn-sm" onclick="eliminarAsistencia(${registro.id}, '${nombreEsc}', '${registro.fecha}', '${registro.hora}', '${registro.movimiento}')" title="Anular registro">
-                        🗑️ Anular
+                    <button class="btn btn-danger btn-sm" onclick="eliminarAsistencia(${registro.id})" title="Eliminar checada permanentemente">
+                        🗑️ Eliminar
                     </button>
                 </div>
             </div>
@@ -221,15 +221,107 @@ function ampliarFoto(fotoSrc, nombreEmpleado) {
     };
 }
 
-async function eliminarAsistencia(asistenciaId, nombreEmpleado, fecha, hora, movimiento) {
-    const avisoJornada = esMovimientoEntrada(movimiento)
-        ? '\n\n⚠️ Si la ENTRADA ya tiene SALIDA emparejada, anula primero la salida. Una ENTRADA con jornada abierta sí se puede anular.'
-        : '\n\n⚠️ Anular una SALIDA puede afectar el cálculo de horas en nómina.';
-    if (
-        !confirm(
-            `¿Anular este registro de asistencia?\n\nEmpleado: ${nombreEmpleado}\nFecha: ${fecha}\nHora: ${hora}\nMovimiento: ${etiquetaMovimiento(movimiento)}${avisoJornada}\n\nEl registro quedará oculto (anulado) pero conservado para auditoría.`
-        )
-    ) {
+const TEXTO_CONFIRMACION_ELIMINAR_CHECADA =
+    'Se eliminará esta checada. Si tiene SALIDA ligada, también se elimina. No se puede deshacer.';
+
+function mostrarToastChecadaEliminada(mensaje = 'Checada eliminada.') {
+    let toast = document.getElementById('toast-checada-eliminada');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'toast-checada-eliminada';
+        toast.setAttribute('role', 'status');
+        toast.style.cssText = `
+            position: fixed;
+            bottom: 1.5rem;
+            left: 50%;
+            transform: translateX(-50%) translateY(120%);
+            background: #166534;
+            color: #fff;
+            padding: 0.75rem 1.25rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+            z-index: 10001;
+            font-weight: 600;
+            transition: transform 0.25s ease;
+        `;
+        document.body.appendChild(toast);
+    }
+    toast.textContent = mensaje;
+    requestAnimationFrame(() => {
+        toast.style.transform = 'translateX(-50%) translateY(0)';
+    });
+    window.clearTimeout(mostrarToastChecadaEliminada._timer);
+    mostrarToastChecadaEliminada._timer = window.setTimeout(() => {
+        toast.style.transform = 'translateX(-50%) translateY(120%)';
+    }, 2800);
+}
+
+function confirmarEliminarChecada() {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = `
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.45);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            padding: 1rem;
+        `;
+
+        const panel = document.createElement('div');
+        panel.style.cssText = `
+            background: var(--card-bg, #fff);
+            color: inherit;
+            max-width: 420px;
+            width: 100%;
+            border-radius: 12px;
+            padding: 1.25rem 1.5rem;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+        `;
+
+        const texto = document.createElement('p');
+        texto.textContent = TEXTO_CONFIRMACION_ELIMINAR_CHECADA;
+        texto.style.cssText = 'margin: 0 0 1.25rem; line-height: 1.45;';
+
+        const acciones = document.createElement('div');
+        acciones.style.cssText = 'display: flex; gap: 0.75rem; justify-content: flex-end; flex-wrap: wrap;';
+
+        const btnCancelar = document.createElement('button');
+        btnCancelar.type = 'button';
+        btnCancelar.className = 'btn btn-secondary';
+        btnCancelar.textContent = 'Cancelar';
+
+        const btnEliminar = document.createElement('button');
+        btnEliminar.type = 'button';
+        btnEliminar.className = 'btn btn-danger';
+        btnEliminar.textContent = 'Eliminar';
+
+        const cerrar = (valor) => {
+            document.body.removeChild(overlay);
+            resolve(valor);
+        };
+
+        btnCancelar.addEventListener('click', () => cerrar(false));
+        btnEliminar.addEventListener('click', () => cerrar(true));
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) cerrar(false);
+        });
+
+        acciones.appendChild(btnCancelar);
+        acciones.appendChild(btnEliminar);
+        panel.appendChild(texto);
+        panel.appendChild(acciones);
+        overlay.appendChild(panel);
+        document.body.appendChild(overlay);
+        btnEliminar.focus();
+    });
+}
+
+async function eliminarAsistencia(asistenciaId) {
+    const confirmado = await confirmarEliminarChecada();
+    if (!confirmado) {
         return;
     }
 
@@ -242,7 +334,7 @@ async function eliminarAsistencia(asistenciaId, nombreEmpleado, fecha, hora, mov
         const data = await response.json();
 
         if (data.success) {
-            alert(`✅ ${data.message}`);
+            mostrarToastChecadaEliminada('Checada eliminada.');
             cargarAsistencia();
         } else {
             alert(`❌ Error: ${data.message}`);

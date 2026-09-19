@@ -18,7 +18,8 @@ const {
     emparejarEntradaSalida,
     calcularHorasTrabajadasDecimales,
     fechaHoraServidorMexico,
-    registroAnulado
+    registroAnulado,
+    resolverIdsEliminacionAsistencia
 } = jornada;
 const { obtenerKioskTokenEsperado, tokenKioskEnRequest } = require('../lib/kiosk-auth');
 const { claveFechaOrden } = require('../lib/fechas');
@@ -301,9 +302,7 @@ async function testSalidaSinEntradaAbierta() {
     ok('salida sin entrada abierta: rechazo claro y sin registro insertado');
 }
 
-/** Admin puede anular ENTRADA con jornada abierta; sigue bloqueada si ya tiene SALIDA emparejada. */
-async function testValidarEliminacionEntradaAbierta() {
-    const tmp = path.join(__dirname, `test-anular-entrada-${Date.now()}.db`);
+async function crearDbAsistenciaPrueba(tmp) {
     const db = new sqlite3.Database(tmp);
     await dbRunAsync(
         db,
@@ -320,45 +319,146 @@ async function testValidarEliminacionEntradaAbierta() {
             anulado INTEGER DEFAULT 0
         )`
     );
+    return db;
+}
+
+async function cargarFilasActivas(db, empleadoId) {
+    return new Promise((resolve, reject) => {
+        db.all(
+            `SELECT id, empleado_id, fecha, hora, movimiento, anulado
+             FROM asistencia
+             WHERE empleado_id = ? AND (anulado IS NULL OR anulado = 0)
+             ORDER BY id ASC`,
+            [empleadoId],
+            (err, rows) => (err ? reject(err) : resolve(rows || []))
+        );
+    });
+}
+
+async function hardDeleteComoAdmin(db, registro) {
+    const { idsParaEliminarAsistencia } = require('../routes/asistencia');
+    const ids = await idsParaEliminarAsistencia(db, registro);
+    await runInTransaction(db, async (run) => {
+        for (const registroId of ids) {
+            await run(`DELETE FROM asistencia WHERE id = ?`, [registroId]);
+        }
+    });
+    return ids;
+}
+
+async function testHardDeleteEntradaAbierta() {
+    const tmp = path.join(__dirname, `test-hard-delete-entrada-abierta-${Date.now()}.db`);
+    const db = await crearDbAsistenciaPrueba(tmp);
     await dbRunAsync(
         db,
         `INSERT INTO asistencia (empleado_id, fecha, hora, movimiento, turno, area)
          VALUES (1, '10/10/2026', '08:00:00 a.m.', 'ENTRADA', 1, NULL)`
     );
 
-    const { validarEliminacionAsistencia } = require('../routes/asistencia');
-    const registroAbierto = {
+    const registro = {
         id: 1,
         empleado_id: 1,
         fecha: '10/10/2026',
         hora: '08:00:00 a.m.',
         movimiento: 'ENTRADA'
     };
-    const validacionAbierta = await validarEliminacionAsistencia(db, registroAbierto);
-    assert.strictEqual(validacionAbierta.ok, true, 'entrada con jornada abierta debe poder anularse');
+    const filas = await cargarFilasActivas(db, 1);
+    assert.deepStrictEqual(resolverIdsEliminacionAsistencia(filas, registro), [1]);
 
+    await hardDeleteComoAdmin(db, registro);
+
+    const restantes = await new Promise((resolve, reject) => {
+        db.all(`SELECT id FROM asistencia`, [], (err, rows) => (err ? reject(err) : resolve(rows || [])));
+    });
+    assert.strictEqual(restantes.length, 0);
+
+    db.close();
+    fs.unlinkSync(tmp);
+    ok('hard-delete ENTRADA con jornada abierta');
+}
+
+async function testHardDeleteEntradaConSalidaEmparejada() {
+    const tmp = path.join(__dirname, `test-hard-delete-entrada-salida-${Date.now()}.db`);
+    const db = await crearDbAsistenciaPrueba(tmp);
+    await dbRunAsync(
+        db,
+        `INSERT INTO asistencia (empleado_id, fecha, hora, movimiento, turno, area)
+         VALUES (1, '10/10/2026', '08:00:00 a.m.', 'ENTRADA', 1, NULL)`
+    );
     await dbRunAsync(
         db,
         `INSERT INTO asistencia (empleado_id, fecha, hora, movimiento, turno, area)
          VALUES (1, '10/10/2026', '05:00:00 p.m.', 'SALIDA', 1, NULL)`
     );
-    const validacionEmparejada = await validarEliminacionAsistencia(db, registroAbierto);
-    assert.strictEqual(validacionEmparejada.ok, false, 'entrada con salida emparejada sigue protegida');
-    assert.ok(validacionEmparejada.message.includes('SALIDA emparejada'));
 
-    const result = await dbRunAsync(db, `UPDATE asistencia SET anulado = 1 WHERE id = 1`);
-    assert.strictEqual(result.changes, 1, 'soft-delete marca anulado=1');
+    const registroEntrada = {
+        id: 1,
+        empleado_id: 1,
+        fecha: '10/10/2026',
+        hora: '08:00:00 a.m.',
+        movimiento: 'ENTRADA'
+    };
+    const filas = await cargarFilasActivas(db, 1);
+    assert.deepStrictEqual(resolverIdsEliminacionAsistencia(filas, registroEntrada).sort(), [1, 2]);
+
+    const ids = await hardDeleteComoAdmin(db, registroEntrada);
+    assert.deepStrictEqual(ids.sort(), [1, 2]);
+
+    const salidas = await new Promise((resolve, reject) => {
+        db.all(`SELECT id FROM asistencia WHERE movimiento = 'SALIDA'`, [], (err, rows) =>
+            err ? reject(err) : resolve(rows || [])
+        );
+    });
+    assert.strictEqual(salidas.length, 0, 'sin SALIDA huérfana tras borrar ENTRADA emparejada');
 
     db.close();
     fs.unlinkSync(tmp);
-    ok('admin puede anular ENTRADA con jornada abierta; emparejada sigue bloqueada');
+    ok('hard-delete ENTRADA + SALIDA emparejada (cascada, sin 409)');
+}
+
+async function testHardDeleteSalidaSola() {
+    const tmp = path.join(__dirname, `test-hard-delete-salida-${Date.now()}.db`);
+    const db = await crearDbAsistenciaPrueba(tmp);
+    await dbRunAsync(
+        db,
+        `INSERT INTO asistencia (empleado_id, fecha, hora, movimiento, turno, area)
+         VALUES (1, '10/10/2026', '08:00:00 a.m.', 'ENTRADA', 1, NULL)`
+    );
+    await dbRunAsync(
+        db,
+        `INSERT INTO asistencia (empleado_id, fecha, hora, movimiento, turno, area)
+         VALUES (1, '10/10/2026', '05:00:00 p.m.', 'SALIDA', 1, NULL)`
+    );
+
+    const registroSalida = {
+        id: 2,
+        empleado_id: 1,
+        fecha: '10/10/2026',
+        hora: '05:00:00 p.m.',
+        movimiento: 'SALIDA'
+    };
+    const filas = await cargarFilasActivas(db, 1);
+    assert.deepStrictEqual(resolverIdsEliminacionAsistencia(filas, registroSalida), [2]);
+
+    await hardDeleteComoAdmin(db, registroSalida);
+
+    const restantes = await cargarFilasActivas(db, 1);
+    assert.strictEqual(restantes.length, 1);
+    assert.strictEqual(restantes[0].movimiento, 'ENTRADA');
+    assert.strictEqual(encontrarEntradasAbiertas(restantes).length, 1);
+
+    db.close();
+    fs.unlinkSync(tmp);
+    ok('hard-delete SALIDA sola: solo esa fila, ENTRADA queda abierta');
 }
 
 (async () => {
     await testAutoCierreNoDuplica();
     await testConcurrenciaEntradaDoble();
     await testSalidaSinEntradaAbierta();
-    await testValidarEliminacionEntradaAbierta();
+    await testHardDeleteEntradaAbierta();
+    await testHardDeleteEntradaConSalidaEmparejada();
+    await testHardDeleteSalidaSola();
     console.log('\nTodos los tests de jornada OK');
 })().catch((err) => {
     console.error(err);

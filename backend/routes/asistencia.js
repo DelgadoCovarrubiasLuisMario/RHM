@@ -521,21 +521,9 @@ router.get('/cortes-automaticos', requireAdmin, (req, res) => {
     );
 });
 
-async function validarEliminacionAsistencia(db, registro) {
+async function idsParaEliminarAsistencia(db, registro) {
     const registros = await cargarRegistrosEmpleado(db, registro.empleado_id);
-
-    if (esEntrada(registro.movimiento)) {
-        const par = jornada.emparejarEntradaSalida(registros).find((p) => p.entrada.id === registro.id);
-        if (par && par.salida) {
-            return {
-                ok: false,
-                message:
-                    'No se puede eliminar esta ENTRADA porque ya tiene una SALIDA emparejada. Anula primero la salida o corrige desde nómina con soporte.'
-            };
-        }
-    }
-
-    return { ok: true };
+    return jornada.resolverIdsEliminacionAsistencia(registros, registro);
 }
 
 router.get('/registro/:id/foto', requireAdmin, async (req, res) => {
@@ -569,10 +557,9 @@ router.delete('/:id', requireAdmin, async (req, res) => {
     try {
         const registro = await dbGet(
             db,
-            `SELECT a.id, a.empleado_id, a.fecha, a.hora, a.movimiento, e.nombre || ' ' || e.apellido as nombre_empleado
+            `SELECT a.id, a.empleado_id, a.fecha, a.hora, a.movimiento
              FROM asistencia a
-             INNER JOIN empleados e ON a.empleado_id = e.id
-             WHERE a.id = ? AND (a.anulado IS NULL OR a.anulado = 0)`,
+             WHERE a.id = ?`,
             [id]
         );
 
@@ -580,30 +567,29 @@ router.delete('/:id', requireAdmin, async (req, res) => {
             return responderError(res, 404, 'Registro de asistencia no encontrado');
         }
 
-        const validacion = await validarEliminacionAsistencia(db, registro);
-        if (!validacion.ok) {
-            return responderError(res, 409, validacion.message);
-        }
+        const idsEliminar = await idsParaEliminarAsistencia(db, registro);
 
-        const result = await dbRunAsync(
-            db,
-            `UPDATE asistencia SET anulado = 1 WHERE id = ?`,
-            [id]
-        );
+        let totalEliminados = 0;
+        await runInTransaction(db, async (run) => {
+            for (const registroId of idsEliminar) {
+                const result = await run(`DELETE FROM asistencia WHERE id = ?`, [registroId]);
+                totalEliminados += result.changes;
+            }
+        });
 
-        if (result.changes === 0) {
+        if (totalEliminados === 0) {
             return responderError(res, 404, 'Registro no encontrado');
         }
 
         res.json({
             success: true,
-            message: `Registro de asistencia anulado para ${registro.nombre_empleado} (${registro.fecha} ${registro.hora}). Los datos se conservan para auditoría pero ya no cuentan en jornada ni nómina.`
+            message: 'Checada eliminada.'
         });
     } catch (errDelete) {
-        return responderError(res, 500, 'Error al anular registro: ' + errDelete.message);
+        return responderError(res, 500, 'Error al eliminar registro: ' + errDelete.message);
     }
 });
 
 module.exports = router;
 module.exports.cerrarJornadasAutomaticamente = cerrarJornadasAutomaticamente;
-module.exports.validarEliminacionAsistencia = validarEliminacionAsistencia;
+module.exports.idsParaEliminarAsistencia = idsParaEliminarAsistencia;
