@@ -165,8 +165,8 @@ function mostrarAsistencia(registros) {
                     }
                 </div>
                 <div class="asistencia-actions">
-                    <button class="btn btn-danger btn-sm" onclick="eliminarAsistencia(${registro.id}, '${nombreEsc}', '${registro.fecha}', '${registro.hora}', '${registro.movimiento}')" title="Anular registro">
-                        🗑️ Anular
+                    <button class="btn btn-danger btn-sm" onclick="eliminarAsistencia(${registro.id}, '${nombreEsc}', '${registro.fecha}', '${registro.hora}', '${registro.movimiento}')" title="Eliminar registro permanentemente">
+                        🗑️ Eliminar
                     </button>
                 </div>
             </div>
@@ -223,11 +223,11 @@ function ampliarFoto(fotoSrc, nombreEmpleado) {
 
 async function eliminarAsistencia(asistenciaId, nombreEmpleado, fecha, hora, movimiento) {
     const avisoJornada = esMovimientoEntrada(movimiento)
-        ? '\n\n⚠️ Si la ENTRADA ya tiene SALIDA emparejada, anula primero la salida. Una ENTRADA con jornada abierta sí se puede anular.'
-        : '\n\n⚠️ Anular una SALIDA puede afectar el cálculo de horas en nómina.';
+        ? '\n\n⚠️ Si esta ENTRADA tiene una SALIDA emparejada, también se eliminará esa SALIDA (no quedarán salidas huérfanas).'
+        : '\n\n⚠️ Eliminar una SALIDA puede afectar el cálculo de horas en nómina.';
     if (
         !confirm(
-            `¿Anular este registro de asistencia?\n\nEmpleado: ${nombreEmpleado}\nFecha: ${fecha}\nHora: ${hora}\nMovimiento: ${etiquetaMovimiento(movimiento)}${avisoJornada}\n\nEl registro quedará oculto (anulado) pero conservado para auditoría.`
+            `¿Eliminar permanentemente este registro de asistencia?\n\nEmpleado: ${nombreEmpleado}\nFecha: ${fecha}\nHora: ${hora}\nMovimiento: ${etiquetaMovimiento(movimiento)}${avisoJornada}\n\nEsta acción no se puede deshacer: el registro se borrará de la base de datos y dejará de aparecer en listados e historial.`
         )
     ) {
         return;

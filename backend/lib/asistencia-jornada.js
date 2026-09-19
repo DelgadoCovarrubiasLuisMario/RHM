@@ -100,6 +100,20 @@ function entradaParaSalida(registrosEmpleado, salida) {
     return par ? par.entrada : null;
 }
 
+/**
+ * IDs a borrar en DELETE admin: el registro objetivo y, si es ENTRADA con SALIDA FIFO emparejada, también esa SALIDA.
+ */
+function resolverIdsEliminacionAsistencia(registros, registroObjetivo) {
+    const ids = [registroObjetivo.id];
+    if (esEntrada(registroObjetivo.movimiento)) {
+        const par = emparejarEntradaSalida(registros).find((p) => p.entrada.id === registroObjetivo.id);
+        if (par && par.salida) {
+            ids.push(par.salida.id);
+        }
+    }
+    return [...new Set(ids)];
+}
+
 function redondearABloques15Minutos(horasDecimales) {
     if (horasDecimales <= 0) return 0;
     const minutosTotales = horasDecimales * 60;
@@ -178,6 +192,7 @@ module.exports = {
     emparejarEntradaSalida,
     encontrarEntradasAbiertas,
     entradaParaSalida,
+    resolverIdsEliminacionAsistencia,
     redondearABloques15Minutos,
     formatearHorasDecimales,
     calcularHorasTrabajadasDecimales,
