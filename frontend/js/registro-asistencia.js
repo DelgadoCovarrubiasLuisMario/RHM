@@ -7,8 +7,6 @@ const TEXTO_KIOSK_TOKEN_FALTANTE =
     'No se puede checar desde esta tablet: falta configurar el acceso de kiosk. Pide a un administrador que defina KIOSK_TOKEN en el servidor y el mismo valor en esta tablet (despliegue o archivo kiosk-token.local.js).';
 
 // Variables globales
-let movimientoSeleccionado = null;
-let turnoSeleccionado = null;
 let todosLosEmpleados = [];
 let stream = null;
 let videoElement = null;
@@ -255,7 +253,6 @@ function actualizarFechaHora() {
 
 // Seleccionar movimiento (ENTRADA/SALIDA)
 function seleccionarMovimiento(movimiento) {
-    movimientoSeleccionado = movimiento;
     document.getElementById('movimiento').value = movimiento;
     
     // Actualizar botones visualmente
@@ -269,7 +266,6 @@ function seleccionarMovimiento(movimiento) {
 
 // Seleccionar turno (1, 2, 3)
 function seleccionarTurno(turno) {
-    turnoSeleccionado = turno;
     document.getElementById('turno').value = turno;
     
     // Actualizar botones visualmente
@@ -479,9 +475,6 @@ async function capturarFotoConStreamPendiente(promesaStream) {
         ctx.drawImage(video, 0, 0, w, h);
         const fotoBase64 = canvas.toDataURL('image/jpeg', 0.7);
         detenerCamara();
-        if (fotoBase64 && fotoBase64.length > 100) {
-            console.log('✅ Foto capturada correctamente, tamaño:', fotoBase64.length);
-        }
         return fotoBase64;
     } catch (error) {
         console.error('❌ Error al capturar foto:', error);

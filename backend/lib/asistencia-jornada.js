@@ -169,10 +169,6 @@ function fechaHoraServidorMexico(date = new Date()) {
     return { fecha, hora };
 }
 
-function formatearFechaHoraLocal(date) {
-    return fechaHoraServidorMexico(date);
-}
-
 module.exports = {
     ZONA_MX,
     esEntrada,
@@ -187,6 +183,5 @@ module.exports = {
     calcularHorasTrabajadasDecimales,
     calcularTiempoTrabajado,
     fechaHoraServidorMexico,
-    formatearFechaHoraLocal,
     registroAnulado
 };

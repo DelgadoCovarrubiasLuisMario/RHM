@@ -9,12 +9,10 @@ const jornada = require('../lib/asistencia-jornada');
 const {
     esEntrada,
     parsearFechaHora,
-    compararRegistrosCronologicos,
     encontrarEntradasAbiertas,
     entradaParaSalida,
     calcularTiempoTrabajado,
-    fechaHoraServidorMexico,
-    formatearFechaHoraLocal
+    fechaHoraServidorMexico
 } = jornada;
 
 /** Evita registros concurrentes del mismo empleado entre procesos (complementa transacción SQLite). */
@@ -113,7 +111,7 @@ function cerrarJornadasAutomaticamente(db, empleadoId = null, opciones = {}) {
                     if (horasTranscurridas < 9.5) continue;
 
                     const fechaHoraSalida = new Date(fechaHoraEntrada.getTime() + 9.5 * 60 * 60 * 1000);
-                    const { fecha: fechaSalida, hora: horaSalida } = formatearFechaHoraLocal(fechaHoraSalida);
+                    const { fecha: fechaSalida, hora: horaSalida } = fechaHoraServidorMexico(fechaHoraSalida);
 
                     const registrosFresh = await cargarRegistrosEmpleado(db, idEmpleado);
                     const sigueAbierta = encontrarEntradasAbiertas(registrosFresh).some((e) => e.id === entrada.id);
@@ -222,9 +220,6 @@ router.post('/registrar', requireKiosk, async (req, res) => {
                 const resultado = await cerrarJornadasAutomaticamente(db, empleado.id, { skipLock: true });
                 if (resultado.cerradas > 0) {
                     autoCierreMensajes = resultado.mensajes;
-                    console.log(
-                        `✅ ${resultado.cerradas} jornada(s) cerrada(s) automáticamente para ${empleado.nombre} ${empleado.apellido}`
-                    );
                 }
 
                 const registros = await cargarRegistrosEmpleado(db, empleado.id);

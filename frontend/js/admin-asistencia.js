@@ -47,7 +47,7 @@ async function cargarAsistencia() {
         const data = await response.json();
 
         if (data.success) {
-            mostrarAsistencia(data.data, 'Planta');
+            mostrarAsistencia(data.data);
         } else {
             listaPlanta.innerHTML = `<div class="error">Error: ${data.message || 'Error desconocido'}</div>`;
         }
@@ -58,8 +58,7 @@ async function cargarAsistencia() {
 }
 
 // Mostrar lista de asistencia
-function mostrarAsistencia(registros, area) {
-    // Ya no separamos por área, siempre usar Planta
+function mostrarAsistencia(registros) {
     const listaDiv = document.getElementById('listaAsistenciaPlanta');
     const countDiv = document.getElementById('countPlanta');
 
