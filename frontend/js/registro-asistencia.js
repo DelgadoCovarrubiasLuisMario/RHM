@@ -1,22 +1,33 @@
+/** CA Diseño — textos fijos es-MX (no cambiar sin diseño) */
+const CA_TEXTO_CAMARA_FALLIDA =
+    'No se pudo usar la cámara. Abre la app con la dirección segura (candado) o pide ayuda a un admin.';
+const CA_TEXTO_SALIDA_AUTO_95 =
+    'Salida registrada automáticamente (jornada de 9.5 h).';
+const TEXTO_KIOSK_TOKEN_FALTANTE =
+    'No se puede checar desde esta tablet: falta configurar el acceso de kiosk. Pide a un administrador que defina KIOSK_TOKEN en el servidor y el mismo valor en esta tablet (despliegue o archivo kiosk-token.local.js).';
+
 // Variables globales
-let movimientoSeleccionado = null;
-let turnoSeleccionado = null;
 let todosLosEmpleados = [];
 let stream = null;
 let videoElement = null;
 let registrando = false;
+let kioskRequiereToken = false;
+let kioskConfigCargada = false;
 
 // Inicializar página
 document.addEventListener('DOMContentLoaded', function() {
     // Cargar empleados para la búsqueda
     cargarEmpleados();
 
+    cargarConfigKiosk().then(() => {
+        setTimeout(verificarBannerTokenKiosk, 50);
+    });
+
     // Aviso fijo si no hay HTTPS (causa típica en despliegue con http://IP)
     avisarSiCamaraNoDisponible();
 
-    // Actualizar fecha y hora cada segundo
-    actualizarFechaHora();
-    setInterval(actualizarFechaHora, 1000);
+    refrescarHoraServidor();
+    setInterval(refrescarHoraServidor, 1000);
 
     // Configurar búsqueda de empleados
     configurarBusquedaEmpleados();
@@ -41,24 +52,87 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
-function avisarSiCamaraNoDisponible() {
-    const aviso = document.getElementById('avisoCamara');
-    if (!aviso) return;
+function pintarHoraServidor(fecha, hora) {
+    const el = document.getElementById('horaServidor');
+    if (el && fecha && hora) {
+        el.value = `${fecha} ${hora}`;
+    }
+}
 
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        aviso.textContent = '⚠️ Este navegador no permite usar la cámara. La foto es obligatoria: usa Chrome/Edge actualizado.';
-        aviso.style.display = 'block';
+async function refrescarHoraServidor() {
+    try {
+        const apiURL = window.API_CONFIG ? window.API_CONFIG.getBaseURL() : 'http://localhost:3000';
+        const response = await fetch(`${apiURL}/api/asistencia/kiosk-config`);
+        const data = await response.json();
+        if (data.success) {
+            kioskRequiereToken = Boolean(data.requiresToken);
+            pintarHoraServidor(data.fecha, data.hora);
+        }
+    } catch (error) {
+        console.warn('No se pudo cargar kiosk-config:', error);
+    } finally {
+        kioskConfigCargada = true;
+    }
+}
+
+async function cargarConfigKiosk() {
+    await refrescarHoraServidor();
+}
+
+async function asegurarConfigKiosk() {
+    if (!kioskConfigCargada) {
+        await cargarConfigKiosk();
+    }
+}
+
+function tokenKioskListoParaRegistrar() {
+    if (!kioskRequiereToken) {
+        return true;
+    }
+    const token =
+        window.API_CONFIG && window.API_CONFIG.getKioskToken
+            ? window.API_CONFIG.getKioskToken()
+            : '';
+    return Boolean(token && String(token).trim());
+}
+
+function mostrarBannerTokenKioskFaltante() {
+    const aviso = document.getElementById('avisoKioskToken');
+    if (!aviso) {
+        mostrarMensaje(TEXTO_KIOSK_TOKEN_FALTANTE, 'error');
         return;
     }
+    aviso.className = 'mensaje mensaje-error';
+    aviso.style.display = 'block';
+    aviso.innerHTML =
+        `<p style="margin:0 0 12px 0;">${TEXTO_KIOSK_TOKEN_FALTANTE}</p>` +
+        `<button type="button" class="btn btn-secondary" onclick="cerrarBannerTokenKiosk()">Cerrar</button>`;
+}
 
-    if (!esContextoSeguroParaCamara()) {
-        const host = window.location.hostname;
-        aviso.innerHTML =
-            '⚠️ <strong>La cámara está bloqueada porque abriste con HTTP.</strong><br>' +
-            `Abre en la tablet: <strong>https://${host}</strong><br>` +
-            'Acepta el aviso de certificado (“Avanzado → Continuar / Aceptar el riesgo”). ' +
-            'Sin HTTPS el navegador no muestra el permiso de cámara.';
-        aviso.style.display = 'block';
+function cerrarBannerTokenKiosk() {
+    const aviso = document.getElementById('avisoKioskToken');
+    if (aviso) {
+        aviso.style.display = 'none';
+        aviso.innerHTML = '';
+    }
+}
+
+function verificarBannerTokenKiosk() {
+    if (!kioskRequiereToken || tokenKioskListoParaRegistrar()) {
+        cerrarBannerTokenKiosk();
+        return;
+    }
+    mostrarBannerTokenKioskFaltante();
+}
+
+window.verificarBannerTokenKiosk = verificarBannerTokenKiosk;
+window.cerrarBannerTokenKiosk = cerrarBannerTokenKiosk;
+
+function avisarSiCamaraNoDisponible() {
+    const sinApi =
+        !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia;
+    if (sinApi || !esContextoSeguroParaCamara()) {
+        mostrarBannerCamaraFallida();
     }
 }
 
@@ -165,32 +239,8 @@ function resolverCodigoEmpleado(dato) {
     return window.resolverEmpleadoDeLista(todosLosEmpleados, dato);
 }
 
-// Actualizar fecha y hora en tiempo real
-function actualizarFechaHora() {
-    const ahora = new Date();
-    
-    // Formatear fecha (DD/MM/YYYY)
-    const fecha = ahora.toLocaleDateString('es-MX', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-    });
-    
-    // Formatear hora (HH:MM:SS AM/PM)
-    const hora = ahora.toLocaleTimeString('es-MX', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true
-    });
-
-    document.getElementById('fecha').value = fecha;
-    document.getElementById('hora').value = hora;
-}
-
 // Seleccionar movimiento (ENTRADA/SALIDA)
 function seleccionarMovimiento(movimiento) {
-    movimientoSeleccionado = movimiento;
     document.getElementById('movimiento').value = movimiento;
     
     // Actualizar botones visualmente
@@ -204,7 +254,6 @@ function seleccionarMovimiento(movimiento) {
 
 // Seleccionar turno (1, 2, 3)
 function seleccionarTurno(turno) {
-    turnoSeleccionado = turno;
     document.getElementById('turno').value = turno;
     
     // Actualizar botones visualmente
@@ -235,7 +284,6 @@ async function solicitarStreamCamara() {
             return await navigator.mediaDevices.getUserMedia(constraints);
         } catch (error) {
             ultimoError = error;
-            console.warn('⚠️ Intento de cámara fallido con constraints:', constraints, error);
         }
     }
 
@@ -257,18 +305,58 @@ function iniciarPromesaStreamEntrada() {
         return Promise.resolve(null);
     }
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        console.warn('⚠️ getUserMedia no está disponible');
+        console.warn('Cámara no disponible en este navegador');
+        mostrarBannerCamaraFallida();
         return Promise.resolve(null);
     }
     if (!esContextoSeguroParaCamara()) {
-        mostrarMensaje('⚠️ La cámara requiere HTTPS. Abre la app con https:// para capturar foto.', 'error');
+        mostrarBannerCamaraFallida();
         return Promise.resolve(null);
     }
     return solicitarStreamCamara().catch((err) => {
-        console.warn('⚠️ Error al abrir cámara:', err);
+        console.warn('Error al abrir cámara:', err);
+        mostrarBannerCamaraFallida();
         return null;
     });
 }
+
+function mostrarBannerCamaraFallida() {
+    const aviso = document.getElementById('avisoCamara');
+    const mensajeDiv = document.getElementById('mensaje');
+    const target = aviso || mensajeDiv;
+    if (!target) return;
+
+    target.className = 'mensaje mensaje-error';
+    target.style.display = 'block';
+    target.innerHTML =
+        `<p style="margin:0 0 12px 0;">${CA_TEXTO_CAMARA_FALLIDA}</p>` +
+        `<div style="display:flex;gap:10px;flex-wrap:wrap;">` +
+        `<button type="button" class="btn btn-primary" onclick="reintentarRegistroConCamara()">Reintentar</button>` +
+        `<button type="button" class="btn btn-secondary" onclick="cerrarBannerCamaraFallida()">Cerrar</button>` +
+        `</div>`;
+}
+
+function cerrarBannerCamaraFallida() {
+    const aviso = document.getElementById('avisoCamara');
+    const mensajeDiv = document.getElementById('mensaje');
+    if (aviso) {
+        aviso.style.display = 'none';
+        aviso.innerHTML = '';
+    }
+    if (mensajeDiv) {
+        mensajeDiv.style.display = 'none';
+    }
+}
+
+function reintentarRegistroConCamara() {
+    cerrarBannerCamaraFallida();
+    const form = document.getElementById('registroForm');
+    if (form) {
+        form.requestSubmit();
+    }
+}
+window.reintentarRegistroConCamara = reintentarRegistroConCamara;
+window.cerrarBannerCamaraFallida = cerrarBannerCamaraFallida;
 
 function detenerStreamSiExiste(s) {
     if (s && s.getTracks) {
@@ -346,7 +434,7 @@ async function capturarFotoConStreamPendiente(promesaStream) {
     try {
         const mediaStream = await promesaStream;
         if (!mediaStream) {
-            mostrarMensaje('⚠️ No se pudo tomar foto (permiso de cámara o dispositivo). La foto es obligatoria.', 'error');
+            mostrarBannerCamaraFallida();
             return null;
         }
         stream = mediaStream;
@@ -355,9 +443,7 @@ async function capturarFotoConStreamPendiente(promesaStream) {
         await esperarVideoConDimensiones(video);
         const playP = video.play();
         if (playP !== undefined) {
-            await playP.catch((e) => {
-                console.warn('video.play:', e);
-            });
+            await playP.catch(() => {});
         }
         await new Promise(requestAnimationFrame);
         // Reducir tamaño para no saturar el POST JSON (base64 crece ~33%)
@@ -374,14 +460,11 @@ async function capturarFotoConStreamPendiente(promesaStream) {
         ctx.drawImage(video, 0, 0, w, h);
         const fotoBase64 = canvas.toDataURL('image/jpeg', 0.7);
         detenerCamara();
-        if (fotoBase64 && fotoBase64.length > 100) {
-            console.log('✅ Foto capturada correctamente, tamaño:', fotoBase64.length);
-        }
         return fotoBase64;
     } catch (error) {
         console.error('❌ Error al capturar foto:', error);
         detenerCamara();
-        mostrarMensaje('⚠️ No se pudo tomar foto en este dispositivo. La foto es obligatoria.', 'error');
+        mostrarBannerCamaraFallida();
         return null;
     }
 }
@@ -426,11 +509,17 @@ document.getElementById('registroForm').addEventListener('submit', async functio
     const codigo = resuelto.empleado.codigo;
     document.getElementById('codigo').value = codigo;
     if (!movimiento) {
-        mostrarMensaje('Selecciona INGRESO o SALIDA', 'error');
+        mostrarMensaje('Selecciona ENTRADA o SALIDA', 'error');
         return;
     }
     if (!turno) {
         mostrarMensaje('Selecciona el turno', 'error');
+        return;
+    }
+
+    await asegurarConfigKiosk();
+    if (!tokenKioskListoParaRegistrar()) {
+        mostrarBannerTokenKioskFaltante();
         return;
     }
 
@@ -460,23 +549,25 @@ document.getElementById('registroForm').addEventListener('submit', async functio
         }
 
         if (!fotoBase64 || fotoBase64.length < 100) {
-            mostrarMensaje('❌ La foto es obligatoria para registrar ingreso y salida. Usa HTTPS y permite la cámara.', 'error');
+            mostrarBannerCamaraFallida();
             return;
         }
 
         const apiURL = window.API_CONFIG ? window.API_CONFIG.getBaseURL() : 'http://localhost:3000';
+        const kioskHeaders = window.API_CONFIG && window.API_CONFIG.getKioskHeaders
+            ? window.API_CONFIG.getKioskHeaders()
+            : {};
         const response = await fetch(`${apiURL}/api/asistencia/registrar`, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                ...kioskHeaders
             },
             body: JSON.stringify({
                 codigo,
                 movimiento,
                 turno: parseInt(turno, 10),
-                foto: fotoBase64,
-                fecha: document.getElementById('fecha').value,
-                hora: document.getElementById('hora').value
+                foto: fotoBase64
             })
         });
 
@@ -496,6 +587,16 @@ document.getElementById('registroForm').addEventListener('submit', async functio
                 mensaje = `✅ ${data.message} - ${data.data ? data.data.empleado : ''}`;
             }
 
+            if (
+                (data.data && data.data.jornadasCerradasAutomaticamente && data.data.jornadasCerradasAutomaticamente.length) ||
+                data.data?.salida_automatica === 1
+            ) {
+                mensaje +=
+                    `<div style="margin-top:10px;padding:10px;background:#fef3c7;border-radius:8px;color:#92400e;font-size:0.95em;">` +
+                    CA_TEXTO_SALIDA_AUTO_95 +
+                    `</div>`;
+            }
+
             mostrarMensaje(mensaje, 'success');
             document.getElementById('codigo').value = '';
             document.getElementById('listaEmpleados').style.display = 'none';
@@ -504,12 +605,17 @@ document.getElementById('registroForm').addEventListener('submit', async functio
                 const codigoInput = document.getElementById('codigo');
                 if (codigoInput) codigoInput.focus();
             }, 200);
+        } else if (response.status === 401) {
+            mostrarMensaje(
+                `❌ ${data.message || 'Token de kiosk inválido.'}<br>Configura el mismo valor que <code>KIOSK_TOKEN</code> en la tablet (ver README).`,
+                'error'
+            );
         } else {
             mostrarMensaje(`❌ ${data.message}`, 'error');
         }
     } catch (error) {
         console.error('Error:', error);
-        mostrarMensaje('❌ Error de conexión. Verifica que el servidor esté corriendo.', 'error');
+        mostrarMensaje('❌ Error de conexión. Verifica la red Wi‑Fi y que el servidor esté encendido.', 'error');
     } finally {
         registrando = false;
         submitBtn.disabled = false;

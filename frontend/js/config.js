@@ -7,6 +7,22 @@ const API_CONFIG = {
             return 'http://localhost:3000';
         }
         return window.location.origin;
+    },
+    /** Token compartido con KIOSK_TOKEN del servidor (tablets de registro). */
+    getKioskToken: function () {
+        if (typeof window.__RHM_KIOSK_TOKEN__ === 'string' && window.__RHM_KIOSK_TOKEN__) {
+            return window.__RHM_KIOSK_TOKEN__;
+        }
+        try {
+            return localStorage.getItem('rhm_kiosk_token') || '';
+        } catch (_e) {
+            return '';
+        }
+    },
+    getKioskHeaders: function () {
+        const token = this.getKioskToken();
+        if (!token) return {};
+        return { 'X-Kiosk-Token': token };
     }
 };
 

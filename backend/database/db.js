@@ -656,9 +656,69 @@ function migrateAsistenciaTurno4() {
     );
 }
 
+function dbRunAsync(database, sql, params = []) {
+    return new Promise((resolve, reject) => {
+        database.run(sql, params, function (err) {
+            if (err) reject(err);
+            else resolve({ lastID: this.lastID, changes: this.changes });
+        });
+    });
+}
+
+/**
+ * Transacción SQLite (BEGIN IMMEDIATE … COMMIT). Usar para checadas concurrentes.
+ * @param {import('sqlite3').Database} database
+ * @param {(run: (sql: string, params?: unknown[]) => Promise<{lastID: number, changes: number}>) => Promise<void>} fn
+ */
+function runInTransaction(database, fn) {
+    const run = (sql, params = []) => dbRunAsync(database, sql, params);
+    return new Promise((resolve, reject) => {
+        database.serialize(() => {
+            database.run('BEGIN IMMEDIATE', (beginErr) => {
+                if (beginErr) {
+                    reject(beginErr);
+                    return;
+                }
+                fn(run)
+                    .then(() => {
+                        database.run('COMMIT', (commitErr) => {
+                            if (commitErr) reject(commitErr);
+                            else resolve();
+                        });
+                    })
+                    .catch((opErr) => {
+                        database.run('ROLLBACK', () => {
+                            reject(opErr);
+                        });
+                    });
+            });
+        });
+    });
+}
+
+function migrateAsistenciaPhase1() {
+    const database = db;
+    if (!database) return;
+    const addColumn = (sql) =>
+        new Promise((resolve) => {
+            database.run(sql, (err) => {
+                if (err && !String(err.message).includes('duplicate column')) {
+                    console.error('Migración asistencia phase1:', err.message);
+                }
+                resolve();
+            });
+        });
+    addColumn('ALTER TABLE asistencia ADD COLUMN salida_automatica INTEGER DEFAULT 0').then(() =>
+        addColumn('ALTER TABLE asistencia ADD COLUMN anulado INTEGER DEFAULT 0')
+    );
+}
+
 module.exports = {
     initDatabase,
     getDB,
-    migrateAsistenciaTurno4
+    migrateAsistenciaTurno4,
+    migrateAsistenciaPhase1,
+    runInTransaction,
+    dbRunAsync
 };
 

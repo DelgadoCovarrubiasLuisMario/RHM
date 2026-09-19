@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+frontend/js/kiosk-token.local.js
 package-lock.json
 
 # Database
@@ -28,6 +29,9 @@ Thumbs.db
 .vscode/
 .idea/
 
+# QR estáticos legacy (el kiosk no escanea; admin genera QR vía API)
+qrs/
+
 # Archivos temporales y de desarrollo
 *.xlsx
 *.xls
@@ -43,3 +47,4 @@ Prueba*.xlsx
 # Scripts de desarrollo (ya no se usan)
 # backend/scripts/ ya eliminado
 
+backend/scripts/test-*.db

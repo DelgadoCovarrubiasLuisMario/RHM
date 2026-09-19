@@ -8,75 +8,10 @@ const {
     formatearFechaLocal
 } = require('../lib/fechas');
 const { esFestivoOficial, nombreFestivo } = require('../lib/laboral');
-
-// Función para redondear a bloques de 15 minutos (al bloque más cercano)
-function redondearABloques15Minutos(horasDecimales) {
-    if (horasDecimales <= 0) return 0;
-    
-    // Convertir horas a minutos
-    const minutosTotales = horasDecimales * 60;
-    
-    // Redondear al bloque de 15 minutos más cercano
-    const bloques15Min = Math.round(minutosTotales / 15);
-    
-    // Si el resultado es 0 pero había horas trabajadas, usar al menos 0.25 (15 minutos)
-    if (bloques15Min === 0 && horasDecimales > 0) {
-        return 0.25; // Mínimo 15 minutos
-    }
-    
-    // Convertir de vuelta a horas
-    return bloques15Min * 15 / 60;
-}
-
-// Función para calcular horas trabajadas entre entrada y salida
-function calcularHorasTrabajadas(fechaEntrada, horaEntrada, fechaSalida, horaSalida) {
-    try {
-        const parsearFechaHora = (fecha, hora) => {
-            const [dia, mes, año] = fecha.split('/');
-            const horaUpper = hora.toUpperCase();
-            const esPM = horaUpper.includes('P.M.') || horaUpper.includes('PM') || horaUpper.includes('P. M.');
-            const esAM = horaUpper.includes('A.M.') || horaUpper.includes('AM') || horaUpper.includes('A. M.');
-            
-            const partesHora = hora.match(/(\d+):(\d+):(\d+)/);
-            
-            if (partesHora) {
-                let horas = parseInt(partesHora[1]);
-                const minutos = parseInt(partesHora[2]);
-                const segundos = parseInt(partesHora[3]);
-                
-                if (esPM && horas !== 12) {
-                    horas += 12;
-                } else if (esAM && horas === 12) {
-                    horas = 0;
-                }
-                
-                return new Date(parseInt(año), parseInt(mes) - 1, parseInt(dia), horas, minutos, segundos);
-            }
-            return null;
-        };
-
-        const fechaHoraEntrada = parsearFechaHora(fechaEntrada, horaEntrada);
-        const fechaHoraSalida = parsearFechaHora(fechaSalida, horaSalida);
-
-        if (!fechaHoraEntrada || !fechaHoraSalida) {
-            return 0;
-        }
-
-        const diferenciaMs = fechaHoraSalida - fechaHoraEntrada;
-        if (diferenciaMs < 0) {
-            return 0;
-        }
-
-        // Convertir a horas (con decimales)
-        const horasDecimales = diferenciaMs / (1000 * 60 * 60);
-        
-        // Redondear a bloques de 15 minutos (hacia arriba)
-        return redondearABloques15Minutos(horasDecimales);
-    } catch (error) {
-        console.error('Error al calcular horas:', error);
-        return 0;
-    }
-}
+const {
+    emparejarEntradaSalida,
+    calcularHorasTrabajadasDecimales: calcularHorasTrabajadas
+} = require('../lib/asistencia-jornada');
 
 // Función para obtener el día de la semana (0=domingo, 1=lunes, etc.)
 function obtenerDiaSemana(fecha) {
@@ -139,45 +74,6 @@ function fechasConsultaAsistencia(fechaInicio, fechaFin) {
 function fechaDentroDePeriodo(fecha, fechaInicio, fechaFin) {
     const k = claveFechaOrden(fecha);
     return k >= claveFechaOrden(fechaInicio) && k <= claveFechaOrden(fechaFin);
-}
-
-function timestampAsistenciaSueldo(reg) {
-    try {
-        const [dia, mes, año] = String(reg.fecha || '').split('/');
-        const horaUpper = String(reg.hora || '').toUpperCase();
-        const esPM = horaUpper.includes('P.M.') || horaUpper.includes('PM') || horaUpper.includes('P. M.');
-        const esAM = horaUpper.includes('A.M.') || horaUpper.includes('AM') || horaUpper.includes('A. M.');
-        const partesHora = String(reg.hora || '').match(/(\d+):(\d+):(\d+)/);
-        if (!partesHora) return Number(reg.id) || 0;
-        let horas = parseInt(partesHora[1], 10);
-        const minutos = parseInt(partesHora[2], 10);
-        const segundos = parseInt(partesHora[3], 10);
-        if (esPM && horas !== 12) horas += 12;
-        else if (esAM && horas === 12) horas = 0;
-        return new Date(parseInt(año, 10), parseInt(mes, 10) - 1, parseInt(dia, 10), horas, minutos, segundos).getTime();
-    } catch {
-        return Number(reg.id) || 0;
-    }
-}
-
-/** Empareja ENTRADA→SALIDA en orden real (incluye turno nocturno que cruza medianoche). */
-function emparejarEntradaSalida(registros) {
-    const sorted = [...(registros || [])].sort((a, b) => {
-        const ta = timestampAsistenciaSueldo(a);
-        const tb = timestampAsistenciaSueldo(b);
-        if (ta !== tb) return ta - tb;
-        return (Number(a.id) || 0) - (Number(b.id) || 0);
-    });
-    const abiertas = [];
-    const pares = [];
-    for (const r of sorted) {
-        if (r.movimiento === 'ENTRADA' || r.movimiento === 'INGRESO') {
-            abiertas.push(r);
-        } else if (r.movimiento === 'SALIDA' && abiertas.length > 0) {
-            pares.push({ entrada: abiertas.shift(), salida: r });
-        }
-    }
-    return pares;
 }
 
 function agruparRegistrosPorDiaEntrada(registros) {
@@ -270,8 +166,9 @@ router.get('/calcular/:empleado_id', (req, res) => {
                 `SELECT fecha, hora, movimiento, turno 
                  FROM asistencia 
                  WHERE empleado_id = ? 
+                 AND (anulado IS NULL OR anulado = 0)
                  AND fecha IN (${fechasEnRango.map(() => '?').join(',')})
-                 ORDER BY fecha ASC, hora ASC`,
+                 ORDER BY id ASC`,
                 [empleado_id, ...fechasEnRango],
                 (err, registros) => {
                     if (err) {
@@ -791,8 +688,9 @@ router.get('/listar', (req, res) => {
                     `SELECT fecha, hora, movimiento, turno 
                      FROM asistencia 
                      WHERE empleado_id = ? 
+                     AND (anulado IS NULL OR anulado = 0)
                      AND fecha IN (${fechasEnRango.map(() => '?').join(',')})
-                     ORDER BY fecha ASC, hora ASC`,
+                     ORDER BY id ASC`,
                     [empleado.id, ...fechasEnRango],
                     (err, registros) => {
                         if (err) {
@@ -975,8 +873,9 @@ router.post('/pagar/:empleado_id', async (req, res) => {
             `SELECT id, fecha, hora, movimiento, turno
              FROM asistencia
              WHERE empleado_id = ?
+             AND (anulado IS NULL OR anulado = 0)
              AND fecha IN (${fechasEnRango.map(() => '?').join(',')})
-             ORDER BY fecha ASC, hora ASC`,
+             ORDER BY id ASC`,
             [empleado_id, ...fechasEnRango]
         );
 

@@ -20,23 +20,14 @@
 
             <!-- Aviso si la cámara no puede usarse (HTTP en producción) -->
             <div id="avisoCamara" class="mensaje mensaje-error" style="display: none; margin-bottom: 16px;"></div>
+            <div id="avisoKioskToken" class="mensaje mensaje-error" style="display: none; margin-bottom: 16px;"></div>
 
             <!-- Formulario de registro -->
             <form id="registroForm" class="attendance-form">
-                <!-- Fecha -->
                 <div class="form-group">
-                    <label for="fecha">Fecha</label>
+                    <label for="horaServidor">Hora del servidor</label>
                     <div class="input-with-icon">
-                        <input type="text" id="fecha" readonly>
-                        <span class="input-icon">📅</span>
-                    </div>
-                </div>
-
-                <!-- Hora -->
-                <div class="form-group">
-                    <label for="hora">Hora</label>
-                    <div class="input-with-icon">
-                        <input type="text" id="hora" readonly>
+                        <input type="text" id="horaServidor" readonly aria-readonly="true" autocomplete="off">
                         <span class="input-icon">🕐</span>
                     </div>
                 </div>
@@ -56,7 +47,7 @@
                     <label>Movimiento *</label>
                     <div class="movimiento-buttons">
                         <button type="button" class="movimiento-btn" data-movimiento="ENTRADA" onclick="seleccionarMovimiento('ENTRADA')">
-                            INGRESO
+                            ENTRADA
                         </button>
                         <button type="button" class="movimiento-btn" data-movimiento="SALIDA" onclick="seleccionarMovimiento('SALIDA')">
                             SALIDA
@@ -101,6 +92,7 @@
     <!-- Configuración de API -->
     <script src="../js/theme.js"></script>
     <script src="../js/config.js"></script>
+    <script src="../js/kiosk-token-loader.js"></script>
     <script src="../js/resolver-empleado.js"></script>
     <script src="../js/registro-asistencia.js"></script>
 </body>
