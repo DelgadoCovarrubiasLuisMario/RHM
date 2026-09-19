@@ -26,9 +26,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // Aviso fijo si no hay HTTPS (causa típica en despliegue con http://IP)
     avisarSiCamaraNoDisponible();
 
-    // Reloj en pantalla (solo referencia; POST /registrar no envía fecha/hora del cliente).
-    actualizarFechaHora();
-    setInterval(actualizarFechaHora, 1000);
+    refrescarHoraServidor();
+    setInterval(refrescarHoraServidor, 1000);
 
     // Configurar búsqueda de empleados
     configurarBusquedaEmpleados();
@@ -53,19 +52,31 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
-async function cargarConfigKiosk() {
+function pintarHoraServidor(fecha, hora) {
+    const el = document.getElementById('horaServidor');
+    if (el && fecha && hora) {
+        el.value = `${fecha} ${hora}`;
+    }
+}
+
+async function refrescarHoraServidor() {
     try {
         const apiURL = window.API_CONFIG ? window.API_CONFIG.getBaseURL() : 'http://localhost:3000';
         const response = await fetch(`${apiURL}/api/asistencia/kiosk-config`);
         const data = await response.json();
         if (data.success) {
             kioskRequiereToken = Boolean(data.requiresToken);
+            pintarHoraServidor(data.fecha, data.hora);
         }
     } catch (error) {
         console.warn('No se pudo cargar kiosk-config:', error);
     } finally {
         kioskConfigCargada = true;
     }
+}
+
+async function cargarConfigKiosk() {
+    await refrescarHoraServidor();
 }
 
 async function asegurarConfigKiosk() {
@@ -226,29 +237,6 @@ function resolverCodigoEmpleado(dato) {
         return { ok: true, empleado: { codigo: String(dato || '').trim() } };
     }
     return window.resolverEmpleadoDeLista(todosLosEmpleados, dato);
-}
-
-/** Muestra reloj local en #fecha / #hora; la checada autoritativa es la del servidor. */
-function actualizarFechaHora() {
-    const ahora = new Date();
-    
-    // Formatear fecha (DD/MM/YYYY)
-    const fecha = ahora.toLocaleDateString('es-MX', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-    });
-    
-    // Formatear hora (HH:MM:SS AM/PM)
-    const hora = ahora.toLocaleTimeString('es-MX', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true
-    });
-
-    document.getElementById('fecha').value = fecha;
-    document.getElementById('hora').value = hora;
 }
 
 // Seleccionar movimiento (ENTRADA/SALIDA)

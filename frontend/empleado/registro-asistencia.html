@@ -24,23 +24,12 @@
 
             <!-- Formulario de registro -->
             <form id="registroForm" class="attendance-form">
-                <!-- Fecha -->
                 <div class="form-group">
-                    <label for="fecha">Fecha (referencia en tablet)</label>
+                    <label for="horaServidor">Hora del servidor</label>
                     <div class="input-with-icon">
-                        <input type="text" id="fecha" readonly aria-readonly="true">
-                        <span class="input-icon">📅</span>
-                    </div>
-                </div>
-
-                <!-- Hora -->
-                <div class="form-group">
-                    <label for="hora">Hora (referencia en tablet)</label>
-                    <div class="input-with-icon">
-                        <input type="text" id="hora" readonly aria-readonly="true">
+                        <input type="text" id="horaServidor" readonly aria-readonly="true" autocomplete="off">
                         <span class="input-icon">🕐</span>
                     </div>
-                    <small class="help-text">Solo referencia visual; la checada guarda fecha y hora del servidor.</small>
                 </div>
 
                 <!-- Código o nombre -->

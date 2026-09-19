@@ -170,9 +170,12 @@ router.get('/kiosk-config', (req, res) => {
     const tieneTokenServidor = Boolean(obtenerKioskTokenEsperado());
     const requiresToken =
         tieneTokenServidor || process.env.NODE_ENV === 'production';
+    const { fecha, hora } = fechaHoraServidorMexico();
     return res.json({
         success: true,
-        requiresToken
+        requiresToken,
+        fecha,
+        hora
     });
 });
 
