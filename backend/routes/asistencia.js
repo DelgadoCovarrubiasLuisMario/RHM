@@ -523,7 +523,6 @@ router.get('/cortes-automaticos', requireAdmin, (req, res) => {
 
 async function validarEliminacionAsistencia(db, registro) {
     const registros = await cargarRegistrosEmpleado(db, registro.empleado_id);
-    const abiertas = encontrarEntradasAbiertas(registros);
 
     if (esEntrada(registro.movimiento)) {
         const par = jornada.emparejarEntradaSalida(registros).find((p) => p.entrada.id === registro.id);
@@ -532,13 +531,6 @@ async function validarEliminacionAsistencia(db, registro) {
                 ok: false,
                 message:
                     'No se puede eliminar esta ENTRADA porque ya tiene una SALIDA emparejada. Anula primero la salida o corrige desde nómina con soporte.'
-            };
-        }
-        if (abiertas.some((e) => e.id === registro.id)) {
-            return {
-                ok: false,
-                message:
-                    'No se puede eliminar la ENTRADA de una jornada abierta. Registra SALIDA o espera el cierre automático (9.5 h).'
             };
         }
     }
@@ -614,3 +606,4 @@ router.delete('/:id', requireAdmin, async (req, res) => {
 
 module.exports = router;
 module.exports.cerrarJornadasAutomaticamente = cerrarJornadasAutomaticamente;
+module.exports.validarEliminacionAsistencia = validarEliminacionAsistencia;

@@ -223,7 +223,7 @@ function ampliarFoto(fotoSrc, nombreEmpleado) {
 
 async function eliminarAsistencia(asistenciaId, nombreEmpleado, fecha, hora, movimiento) {
     const avisoJornada = esMovimientoEntrada(movimiento)
-        ? '\n\n⚠️ No se puede anular una ENTRADA con jornada abierta o ya emparejada con SALIDA.'
+        ? '\n\n⚠️ Si la ENTRADA ya tiene SALIDA emparejada, anula primero la salida. Una ENTRADA con jornada abierta sí se puede anular.'
         : '\n\n⚠️ Anular una SALIDA puede afectar el cálculo de horas en nómina.';
     if (
         !confirm(

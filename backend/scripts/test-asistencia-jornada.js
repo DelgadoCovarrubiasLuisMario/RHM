@@ -301,10 +301,64 @@ async function testSalidaSinEntradaAbierta() {
     ok('salida sin entrada abierta: rechazo claro y sin registro insertado');
 }
 
+/** Admin puede anular ENTRADA con jornada abierta; sigue bloqueada si ya tiene SALIDA emparejada. */
+async function testValidarEliminacionEntradaAbierta() {
+    const tmp = path.join(__dirname, `test-anular-entrada-${Date.now()}.db`);
+    const db = new sqlite3.Database(tmp);
+    await dbRunAsync(
+        db,
+        `CREATE TABLE asistencia (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            empleado_id INTEGER NOT NULL,
+            fecha TEXT NOT NULL,
+            hora TEXT NOT NULL,
+            movimiento TEXT NOT NULL,
+            turno INTEGER NOT NULL,
+            area TEXT,
+            creado_en DATETIME DEFAULT CURRENT_TIMESTAMP,
+            salida_automatica INTEGER DEFAULT 0,
+            anulado INTEGER DEFAULT 0
+        )`
+    );
+    await dbRunAsync(
+        db,
+        `INSERT INTO asistencia (empleado_id, fecha, hora, movimiento, turno, area)
+         VALUES (1, '10/10/2026', '08:00:00 a.m.', 'ENTRADA', 1, NULL)`
+    );
+
+    const { validarEliminacionAsistencia } = require('../routes/asistencia');
+    const registroAbierto = {
+        id: 1,
+        empleado_id: 1,
+        fecha: '10/10/2026',
+        hora: '08:00:00 a.m.',
+        movimiento: 'ENTRADA'
+    };
+    const validacionAbierta = await validarEliminacionAsistencia(db, registroAbierto);
+    assert.strictEqual(validacionAbierta.ok, true, 'entrada con jornada abierta debe poder anularse');
+
+    await dbRunAsync(
+        db,
+        `INSERT INTO asistencia (empleado_id, fecha, hora, movimiento, turno, area)
+         VALUES (1, '10/10/2026', '05:00:00 p.m.', 'SALIDA', 1, NULL)`
+    );
+    const validacionEmparejada = await validarEliminacionAsistencia(db, registroAbierto);
+    assert.strictEqual(validacionEmparejada.ok, false, 'entrada con salida emparejada sigue protegida');
+    assert.ok(validacionEmparejada.message.includes('SALIDA emparejada'));
+
+    const result = await dbRunAsync(db, `UPDATE asistencia SET anulado = 1 WHERE id = 1`);
+    assert.strictEqual(result.changes, 1, 'soft-delete marca anulado=1');
+
+    db.close();
+    fs.unlinkSync(tmp);
+    ok('admin puede anular ENTRADA con jornada abierta; emparejada sigue bloqueada');
+}
+
 (async () => {
     await testAutoCierreNoDuplica();
     await testConcurrenciaEntradaDoble();
     await testSalidaSinEntradaAbierta();
+    await testValidarEliminacionEntradaAbierta();
     console.log('\nTodos los tests de jornada OK');
 })().catch((err) => {
     console.error(err);

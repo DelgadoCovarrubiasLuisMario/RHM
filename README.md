@@ -97,5 +97,5 @@ pm2 start backend/server.js --name rhm-app -i 1
 ## Notas de operación
 
 - Cierre automático de jornada a **9.5 h** sin salida manual; en el listado de admin aparece la etiqueta **Auto** (con el texto completo al pasar el cursor).
-- Eliminar checadas en admin es **anulación** (soft delete); entradas con jornada abierta o ya emparejadas no se pueden anular.
+- Eliminar checadas en admin es **anulación** (soft delete); entradas **ya emparejadas con SALIDA** no se pueden anular hasta anular la salida (las ENTRADA con jornada abierta sí se pueden anular).
 - La base de datos SQLite se crea al iniciar el servidor.
