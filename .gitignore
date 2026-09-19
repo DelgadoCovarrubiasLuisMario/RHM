@@ -29,6 +29,9 @@ Thumbs.db
 .vscode/
 .idea/
 
+# QR estáticos legacy (el kiosk no escanea; admin genera QR vía API)
+qrs/
+
 # Archivos temporales y de desarrollo
 *.xlsx
 *.xls

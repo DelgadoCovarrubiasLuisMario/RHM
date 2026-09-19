@@ -17,8 +17,11 @@ const {
     formatearHorasDecimales,
     emparejarEntradaSalida,
     calcularHorasTrabajadasDecimales,
-    fechaHoraServidorMexico
+    fechaHoraServidorMexico,
+    registroAnulado
 } = jornada;
+const { obtenerKioskTokenEsperado, tokenKioskEnRequest } = require('../lib/kiosk-auth');
+const { claveFechaOrden } = require('../lib/fechas');
 
 
 function ok(name) {
@@ -106,6 +109,36 @@ function ok(name) {
     assert.ok(/^\d{2}\/\d{2}\/\d{4}$/.test(fh.fecha));
     assert.ok(parsearFechaHora(fh.fecha, fh.hora));
     ok('fechaHoraServidorMexico produce valores parseables');
+}
+
+{
+    const entradaAnulada = {
+        id: 1,
+        fecha: '07/09/2026',
+        hora: '07:00:00 a.m.',
+        movimiento: 'ENTRADA',
+        anulado: 1
+    };
+    assert.strictEqual(registroAnulado(entradaAnulada), true);
+    assert.strictEqual(encontrarEntradasAbiertas([entradaAnulada]).length, 0);
+    ok('entrada anulada no deja jornada abierta');
+}
+
+{
+    assert.ok(claveFechaOrden('15/03/2026') >= claveFechaOrden('01/03/2026'));
+    assert.ok(claveFechaOrden('01/03/2026') <= claveFechaOrden('31/03/2026'));
+    ok('claveFechaOrden usable para filtro de rango en listar');
+}
+
+{
+    const prev = process.env.KIOSK_TOKEN;
+    process.env.KIOSK_TOKEN = '  secreto-kiosk  ';
+    assert.strictEqual(obtenerKioskTokenEsperado(), 'secreto-kiosk');
+    const req = { headers: { authorization: 'Kiosk secreto-kiosk' } };
+    assert.strictEqual(tokenKioskEnRequest(req), 'secreto-kiosk');
+    if (prev === undefined) delete process.env.KIOSK_TOKEN;
+    else process.env.KIOSK_TOKEN = prev;
+    ok('kiosk-auth: trim de KIOSK_TOKEN y header Authorization Kiosk');
 }
 
 async function testAutoCierreNoDuplica() {

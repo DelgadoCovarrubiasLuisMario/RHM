@@ -7,8 +7,6 @@ const TEXTO_KIOSK_TOKEN_FALTANTE =
     'No se puede checar desde esta tablet: falta configurar el acceso de kiosk. Pide a un administrador que defina KIOSK_TOKEN en el servidor y el mismo valor en esta tablet (despliegue o archivo kiosk-token.local.js).';
 
 // Variables globales
-let movimientoSeleccionado = null;
-let turnoSeleccionado = null;
 let todosLosEmpleados = [];
 let stream = null;
 let videoElement = null;
@@ -28,9 +26,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // Aviso fijo si no hay HTTPS (causa típica en despliegue con http://IP)
     avisarSiCamaraNoDisponible();
 
-    // Actualizar fecha y hora cada segundo
-    actualizarFechaHora();
-    setInterval(actualizarFechaHora, 1000);
+    refrescarHoraServidor();
+    setInterval(refrescarHoraServidor, 1000);
 
     // Configurar búsqueda de empleados
     configurarBusquedaEmpleados();
@@ -55,19 +52,31 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
-async function cargarConfigKiosk() {
+function pintarHoraServidor(fecha, hora) {
+    const el = document.getElementById('horaServidor');
+    if (el && fecha && hora) {
+        el.value = `${fecha} ${hora}`;
+    }
+}
+
+async function refrescarHoraServidor() {
     try {
         const apiURL = window.API_CONFIG ? window.API_CONFIG.getBaseURL() : 'http://localhost:3000';
         const response = await fetch(`${apiURL}/api/asistencia/kiosk-config`);
         const data = await response.json();
         if (data.success) {
             kioskRequiereToken = Boolean(data.requiresToken);
+            pintarHoraServidor(data.fecha, data.hora);
         }
     } catch (error) {
         console.warn('No se pudo cargar kiosk-config:', error);
     } finally {
         kioskConfigCargada = true;
     }
+}
+
+async function cargarConfigKiosk() {
+    await refrescarHoraServidor();
 }
 
 async function asegurarConfigKiosk() {
@@ -230,32 +239,8 @@ function resolverCodigoEmpleado(dato) {
     return window.resolverEmpleadoDeLista(todosLosEmpleados, dato);
 }
 
-// Actualizar fecha y hora en tiempo real
-function actualizarFechaHora() {
-    const ahora = new Date();
-    
-    // Formatear fecha (DD/MM/YYYY)
-    const fecha = ahora.toLocaleDateString('es-MX', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-    });
-    
-    // Formatear hora (HH:MM:SS AM/PM)
-    const hora = ahora.toLocaleTimeString('es-MX', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true
-    });
-
-    document.getElementById('fecha').value = fecha;
-    document.getElementById('hora').value = hora;
-}
-
 // Seleccionar movimiento (ENTRADA/SALIDA)
 function seleccionarMovimiento(movimiento) {
-    movimientoSeleccionado = movimiento;
     document.getElementById('movimiento').value = movimiento;
     
     // Actualizar botones visualmente
@@ -269,7 +254,6 @@ function seleccionarMovimiento(movimiento) {
 
 // Seleccionar turno (1, 2, 3)
 function seleccionarTurno(turno) {
-    turnoSeleccionado = turno;
     document.getElementById('turno').value = turno;
     
     // Actualizar botones visualmente
@@ -300,7 +284,6 @@ async function solicitarStreamCamara() {
             return await navigator.mediaDevices.getUserMedia(constraints);
         } catch (error) {
             ultimoError = error;
-            console.warn('⚠️ Intento de cámara fallido con constraints:', constraints, error);
         }
     }
 
@@ -460,9 +443,7 @@ async function capturarFotoConStreamPendiente(promesaStream) {
         await esperarVideoConDimensiones(video);
         const playP = video.play();
         if (playP !== undefined) {
-            await playP.catch((e) => {
-                console.warn('video.play:', e);
-            });
+            await playP.catch(() => {});
         }
         await new Promise(requestAnimationFrame);
         // Reducir tamaño para no saturar el POST JSON (base64 crece ~33%)
@@ -479,9 +460,6 @@ async function capturarFotoConStreamPendiente(promesaStream) {
         ctx.drawImage(video, 0, 0, w, h);
         const fotoBase64 = canvas.toDataURL('image/jpeg', 0.7);
         detenerCamara();
-        if (fotoBase64 && fotoBase64.length > 100) {
-            console.log('✅ Foto capturada correctamente, tamaño:', fotoBase64.length);
-        }
         return fotoBase64;
     } catch (error) {
         console.error('❌ Error al capturar foto:', error);
@@ -531,7 +509,7 @@ document.getElementById('registroForm').addEventListener('submit', async functio
     const codigo = resuelto.empleado.codigo;
     document.getElementById('codigo').value = codigo;
     if (!movimiento) {
-        mostrarMensaje('Selecciona INGRESO o SALIDA', 'error');
+        mostrarMensaje('Selecciona ENTRADA o SALIDA', 'error');
         return;
     }
     if (!turno) {
