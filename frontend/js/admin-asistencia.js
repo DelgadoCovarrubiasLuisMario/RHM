@@ -165,8 +165,8 @@ function mostrarAsistencia(registros) {
                     }
                 </div>
                 <div class="asistencia-actions">
-                    <button class="btn btn-danger btn-sm" onclick="eliminarAsistencia(${registro.id})" title="Eliminar checada permanentemente">
-                        🗑️ Eliminar
+                    <button class="btn btn-danger btn-sm" onclick="eliminarAsistencia(${registro.id})" title="Eliminar checada">
+                        Eliminar
                     </button>
                 </div>
             </div>
@@ -309,13 +309,13 @@ function confirmarEliminarChecada() {
             if (e.target === overlay) cerrar(false);
         });
 
-        acciones.appendChild(btnCancelar);
         acciones.appendChild(btnEliminar);
+        acciones.appendChild(btnCancelar);
         panel.appendChild(texto);
         panel.appendChild(acciones);
         overlay.appendChild(panel);
         document.body.appendChild(overlay);
-        btnEliminar.focus();
+        btnCancelar.focus();
     });
 }
 
