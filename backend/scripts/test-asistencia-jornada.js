@@ -202,9 +202,76 @@ async function testConcurrenciaEntradaDoble() {
     ok('segunda entrada rechazada con jornada abierta (transacción + regla)');
 }
 
+/** Misma regla que POST /registrar: SALIDA sin ENTRADA abierta → 409, sin INSERT. */
+async function testSalidaSinEntradaAbierta() {
+    const tmp = path.join(__dirname, `test-salida-sin-entrada-${Date.now()}.db`);
+    const db = new sqlite3.Database(tmp);
+    await dbRunAsync(
+        db,
+        `CREATE TABLE asistencia (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            empleado_id INTEGER NOT NULL,
+            fecha TEXT NOT NULL,
+            hora TEXT NOT NULL,
+            movimiento TEXT NOT NULL,
+            turno INTEGER NOT NULL,
+            area TEXT,
+            salida_automatica INTEGER DEFAULT 0,
+            anulado INTEGER DEFAULT 0
+        )`
+    );
+
+    const registrarSalida = () =>
+        runInTransaction(db, async (run) => {
+            const rows = await new Promise((resolve, reject) => {
+                db.all(
+                    `SELECT id, fecha, hora, movimiento FROM asistencia
+                     WHERE empleado_id = 1 AND (anulado IS NULL OR anulado = 0)
+                     ORDER BY id ASC`,
+                    [],
+                    (err, r) => (err ? reject(err) : resolve(r || []))
+                );
+            });
+            const abiertas = encontrarEntradasAbiertas(rows);
+            if (abiertas.length === 0) {
+                const err = new Error('No hay una entrada abierta para registrar salida.');
+                err.status = 409;
+                throw err;
+            }
+            await run(
+                `INSERT INTO asistencia (empleado_id, fecha, hora, movimiento, turno, area)
+                 VALUES (1, '10/10/2026', '05:00:00 p.m.', 'SALIDA', 1, NULL)`
+            );
+        });
+
+    let mensajeRechazo = '';
+    try {
+        await registrarSalida();
+        assert.fail('debió rechazar SALIDA sin entrada abierta');
+    } catch (e) {
+        assert.strictEqual(e.status, 409);
+        mensajeRechazo = e.message;
+    }
+    assert.ok(mensajeRechazo.includes('entrada abierta'));
+
+    const salidas = await new Promise((resolve, reject) => {
+        db.all(
+            `SELECT id FROM asistencia WHERE movimiento = 'SALIDA'`,
+            [],
+            (err, rows) => (err ? reject(err) : resolve(rows || []))
+        );
+    });
+    assert.strictEqual(salidas.length, 0, 'no debe inventarse registro de SALIDA');
+
+    db.close();
+    fs.unlinkSync(tmp);
+    ok('salida sin entrada abierta: rechazo claro y sin registro insertado');
+}
+
 (async () => {
     await testAutoCierreNoDuplica();
     await testConcurrenciaEntradaDoble();
+    await testSalidaSinEntradaAbierta();
     console.log('\nTodos los tests de jornada OK');
 })().catch((err) => {
     console.error(err);
