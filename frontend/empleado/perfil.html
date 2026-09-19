@@ -3,102 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Perfil de Empleado - RHM</title>
-    <link rel="stylesheet" href="../styles/main.css">
+    <meta http-equiv="refresh" content="0; url=registro-asistencia.html">
+    <title>Redirigiendo…</title>
+    <script>window.location.replace('registro-asistencia.html');</script>
 </head>
 <body>
-    <div class="container">
-        <div class="attendance-card">
-            <!-- Header -->
-            <div class="card-header">
-                <button class="btn-back" onclick="volver()">←</button>
-                <div class="header-content">
-                    <div class="header-icon">👷</div>
-                    <h1>Registro de Asistencia</h1>
-                </div>
-            </div>
-
-            <!-- Formulario de Registro -->
-            <div id="formularioRegistro" class="registro-formulario">
-                <form id="registroForm" class="attendance-form">
-                    <!-- Fecha -->
-                    <div class="form-group">
-                        <label for="fecha">Fecha</label>
-                        <div class="input-with-icon">
-                            <input type="text" id="fecha" readonly>
-                            <span class="input-icon">📅</span>
-                        </div>
-                    </div>
-
-                    <!-- Hora -->
-                    <div class="form-group">
-                        <label for="hora">Hora</label>
-                        <div class="input-with-icon">
-                            <input type="text" id="hora" readonly>
-                            <span class="input-icon">🕐</span>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="codigo">Código o nombre *</label>
-                        <div class="input-with-icon">
-                            <input type="text" id="codigo" placeholder="Buscar por nombre o código" required autocomplete="off">
-                        </div>
-                        <div id="listaEmpleados" class="lista-empleados" style="display: none;"></div>
-                        <small class="help-text">Escribe y selecciona por nombre o código (sin QR).</small>
-                    </div>
-
-                    <!-- Movimiento -->
-                    <div class="form-group">
-                        <label>Movimiento *</label>
-                        <div class="movimiento-buttons">
-                            <button type="button" class="movimiento-btn" data-movimiento="ENTRADA" onclick="seleccionarMovimiento('ENTRADA')">
-                                ENTRADA
-                            </button>
-                            <button type="button" class="movimiento-btn" data-movimiento="SALIDA" onclick="seleccionarMovimiento('SALIDA')">
-                                SALIDA
-                            </button>
-                        </div>
-                        <input type="hidden" id="movimiento">
-                    </div>
-
-                    <!-- Turno -->
-                    <div class="form-group">
-                        <label>Turno *</label>
-                        <div class="turno-buttons turno-buttons-grid">
-                            <button type="button" class="turno-btn" data-turno="1" onclick="seleccionarTurno(1)">
-                                Turno 1<br><small>11pm - 7am</small>
-                            </button>
-                            <button type="button" class="turno-btn" data-turno="2" onclick="seleccionarTurno(2)">
-                                Turno 2<br><small>7am - 3pm</small>
-                            </button>
-                            <button type="button" class="turno-btn" data-turno="3" onclick="seleccionarTurno(3)">
-                                Turno 3<br><small>3pm - 11pm</small>
-                            </button>
-                            <button type="button" class="turno-btn" data-turno="4" onclick="seleccionarTurno(4)">
-                                Turno Planta<br><small>7am - 4:30pm</small>
-                            </button>
-                        </div>
-                        <input type="hidden" id="turno">
-                    </div>
-
-                    <!-- Botón de Aceptar -->
-                    <div class="form-actions">
-                        <button type="submit" class="btn btn-success" style="width: 100%;">Aceptar</button>
-                    </div>
-                </form>
-            </div>
-
-            <!-- Mensaje de éxito/error -->
-            <div id="mensaje" class="mensaje" style="display: none;"></div>
-        </div>
-    </div>
-
-    <!-- Scripts -->
-    <script src="../js/theme.js"></script>
-    <script src="../js/config.js"></script>
-    <script src="../js/resolver-empleado.js"></script>
-    <script src="../js/perfil-empleado.js"></script>
+    <p>Redirigiendo al registro de asistencia… <a href="registro-asistencia.html">Continuar</a></p>
 </body>
 </html>
-

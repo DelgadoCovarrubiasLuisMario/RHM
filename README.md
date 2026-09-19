@@ -92,7 +92,7 @@ pm2 start backend/server.js --name rhm-app -i 1
 
 ## Credenciales por defecto
 
-- **Admin:** usuario `admin`, contraseña `admin123` (cambiar en producción con `npm run set-admin-password`)
+- **Admin:** usuario `admin`, contraseña inicial `RhmAdmin!2026#` si se creó con `npm run init-db` (cambiar en producción con `npm run set-admin-password`)
 
 ## Notas de operación
 

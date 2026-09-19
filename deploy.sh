@@ -66,10 +66,14 @@ else
     echo "✅ Token kiosk escrito en frontend/js/kiosk-token.local.js (gitignored)"
 fi
 
+# Entorno de producción (asistencia: KIOSK_TOKEN obligatorio si NODE_ENV=production)
+export NODE_ENV="${NODE_ENV:-production}"
+export TZ="${TZ:-America/Mexico_City}"
+
 # Iniciar o reiniciar aplicación con PM2
 echo "🚀 Iniciando aplicación..."
 if pm2 list | grep -q "rhm-app"; then
-    pm2 restart rhm-app
+    pm2 restart rhm-app --update-env
 else
     # USE_HTTPS=1 (default): tablets pueden usar cámara sin dominio
     # -i 1: SQLite + locks de asistencia requieren un solo proceso Node
