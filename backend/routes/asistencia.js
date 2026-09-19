@@ -259,7 +259,8 @@ router.post('/registrar', requireKiosk, async (req, res) => {
                 fecha,
                 hora,
                 movimiento,
-                turno: turnoNum
+                turno: turnoNum,
+                salida_automatica: 0
             }
         };
 

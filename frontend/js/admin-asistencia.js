@@ -1,3 +1,6 @@
+const CA_TEXTO_SALIDA_AUTO_95 =
+    'Salida registrada automáticamente (jornada de 9.5 h).';
+
 // Inicializar página
 document.addEventListener('DOMContentLoaded', function() {
     // Establecer fechas por defecto (hoy)
@@ -84,7 +87,7 @@ function mostrarAsistencia(registros, area) {
                         <span class="codigo-empleado">${registro.codigo}</span>
                     </div>
                     <span class="movimiento-badge ${movimientoClass}">${registro.movimiento}</span>
-                    ${registro.salida_automatica === 1 ? '<span class="movimiento-badge" style="background:#fef3c7;color:#92400e;margin-left:6px;" title="Salida generada por cierre automático a las 9.5 h">Cierre auto 9.5h</span>' : ''}
+                    ${registro.salida_automatica === 1 ? `<span class="movimiento-badge" style="background:#fef3c7;color:#92400e;margin-left:6px;" title="${CA_TEXTO_SALIDA_AUTO_95}">Auto</span>` : ''}
                 </div>
                 ${registro.foto ? `
                 <div class="asistencia-foto-container">
@@ -108,6 +111,11 @@ function mostrarAsistencia(registros, area) {
                     <div class="detail-item tiempo-trabajado">
                         <span class="detail-label">⏱️ Tiempo trabajado:</span>
                         <span class="detail-value tiempo-value">${registro.tiempoTrabajado}</span>
+                    </div>
+                    ` : ''}
+                    ${registro.salida_automatica === 1 ? `
+                    <div class="detail-item" style="color:#92400e;font-weight:600;">
+                        <span class="detail-value">${CA_TEXTO_SALIDA_AUTO_95}</span>
                     </div>
                     ` : ''}
                 </div>

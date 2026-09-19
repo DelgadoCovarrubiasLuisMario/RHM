@@ -1,3 +1,9 @@
+/** CA Diseño — textos fijos es-MX (no cambiar sin diseño) */
+const CA_TEXTO_CAMARA_FALLIDA =
+    'No se pudo usar la cámara. Abre la app con la dirección segura (candado) o pide ayuda a un admin.';
+const CA_TEXTO_SALIDA_AUTO_95 =
+    'Salida registrada automáticamente (jornada de 9.5 h).';
+
 // Variables globales
 let movimientoSeleccionado = null;
 let turnoSeleccionado = null;
@@ -42,23 +48,10 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function avisarSiCamaraNoDisponible() {
-    const aviso = document.getElementById('avisoCamara');
-    if (!aviso) return;
-
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        aviso.textContent = '⚠️ Este navegador no permite usar la cámara. La foto es obligatoria: usa Chrome/Edge actualizado.';
-        aviso.style.display = 'block';
-        return;
-    }
-
-    if (!esContextoSeguroParaCamara()) {
-        const host = window.location.hostname;
-        aviso.innerHTML =
-            '⚠️ <strong>La cámara está bloqueada porque abriste con HTTP.</strong><br>' +
-            `Abre en la tablet: <strong>https://${host}</strong><br>` +
-            'Acepta el aviso de certificado (“Avanzado → Continuar / Aceptar el riesgo”). ' +
-            'Sin HTTPS el navegador no muestra el permiso de cámara.';
-        aviso.style.display = 'block';
+    const sinApi =
+        !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia;
+    if (sinApi || !esContextoSeguroParaCamara()) {
+        mostrarBannerCamaraFallida();
     }
 }
 
@@ -257,50 +250,58 @@ function iniciarPromesaStreamEntrada() {
         return Promise.resolve(null);
     }
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        console.warn('⚠️ getUserMedia no está disponible');
+        console.warn('Cámara no disponible en este navegador');
+        mostrarBannerCamaraFallida();
         return Promise.resolve(null);
     }
     if (!esContextoSeguroParaCamara()) {
-        mostrarMensaje('⚠️ La cámara requiere HTTPS. Abre la app con https:// para capturar foto.', 'error');
+        mostrarBannerCamaraFallida();
         return Promise.resolve(null);
     }
     return solicitarStreamCamara().catch((err) => {
-        console.warn('⚠️ Error al abrir cámara:', err);
-        mensajeErrorCamara(err && err.message ? err.message : 'Error desconocido', err && err.name);
+        console.warn('Error al abrir cámara:', err);
+        mostrarBannerCamaraFallida();
         return null;
     });
 }
 
-function mensajeErrorCamara(detalle, nombreError) {
-    const host = window.location.hostname;
-    let ayuda =
-        'La foto es obligatoria para checar. Revisa permisos de cámara y vuelve a intentar.';
-    if (!esContextoSeguroParaCamara()) {
-        ayuda =
-            `Abre en la tablet <strong>https://${host}</strong>, acepta el certificado (Avanzado → Continuar) y vuelve a guardar. Sin HTTPS el navegador bloquea la cámara.`;
-    } else if (nombreError === 'NotAllowedError' || nombreError === 'PermissionDeniedError') {
-        ayuda =
-            'Permiso denegado: en Chrome toca el ícono del candado en la barra de dirección → Cámara → Permitir, luego pulsa «Reintentar captura».';
-    } else if (nombreError === 'NotFoundError' || nombreError === 'DevicesNotFoundError') {
-        ayuda = 'No se detectó cámara en este dispositivo. Usa una tablet con cámara frontal o revisa que no esté ocupada por otra app.';
-    } else if (nombreError === 'NotReadableError' || nombreError === 'TrackStartError') {
-        ayuda = 'La cámara está en uso o falló al iniciar. Cierra otras apps que usen la cámara y reintenta.';
+function mostrarBannerCamaraFallida() {
+    const aviso = document.getElementById('avisoCamara');
+    const mensajeDiv = document.getElementById('mensaje');
+    const target = aviso || mensajeDiv;
+    if (!target) return;
+
+    target.className = 'mensaje mensaje-error';
+    target.style.display = 'block';
+    target.innerHTML =
+        `<p style="margin:0 0 12px 0;">${CA_TEXTO_CAMARA_FALLIDA}</p>` +
+        `<div style="display:flex;gap:10px;flex-wrap:wrap;">` +
+        `<button type="button" class="btn btn-primary" onclick="reintentarRegistroConCamara()">Reintentar</button>` +
+        `<button type="button" class="btn btn-secondary" onclick="cerrarBannerCamaraFallida()">Cerrar</button>` +
+        `</div>`;
+}
+
+function cerrarBannerCamaraFallida() {
+    const aviso = document.getElementById('avisoCamara');
+    const mensajeDiv = document.getElementById('mensaje');
+    if (aviso) {
+        aviso.style.display = 'none';
+        aviso.innerHTML = '';
     }
-    mostrarMensaje(
-        `❌ <strong>No se pudo abrir la cámara.</strong><br>${ayuda}` +
-            (detalle ? `<br><small>${detalle}</small>` : '') +
-            `<br><button type="button" class="btn btn-primary" style="margin-top:12px" onclick="reintentarRegistroConCamara()">Reintentar captura</button>`,
-        'error'
-    );
+    if (mensajeDiv) {
+        mensajeDiv.style.display = 'none';
+    }
 }
 
 function reintentarRegistroConCamara() {
+    cerrarBannerCamaraFallida();
     const form = document.getElementById('registroForm');
     if (form) {
         form.requestSubmit();
     }
 }
 window.reintentarRegistroConCamara = reintentarRegistroConCamara;
+window.cerrarBannerCamaraFallida = cerrarBannerCamaraFallida;
 
 function detenerStreamSiExiste(s) {
     if (s && s.getTracks) {
@@ -378,7 +379,7 @@ async function capturarFotoConStreamPendiente(promesaStream) {
     try {
         const mediaStream = await promesaStream;
         if (!mediaStream) {
-            mensajeErrorCamara('No se obtuvo stream de video.', 'NotReadableError');
+            mostrarBannerCamaraFallida();
             return null;
         }
         stream = mediaStream;
@@ -413,7 +414,7 @@ async function capturarFotoConStreamPendiente(promesaStream) {
     } catch (error) {
         console.error('❌ Error al capturar foto:', error);
         detenerCamara();
-        mensajeErrorCamara(error && error.message ? error.message : 'Error al capturar', error && error.name);
+        mostrarBannerCamaraFallida();
         return null;
     }
 }
@@ -492,7 +493,7 @@ document.getElementById('registroForm').addEventListener('submit', async functio
         }
 
         if (!fotoBase64 || fotoBase64.length < 100) {
-            mensajeErrorCamara('La captura quedó vacía.', 'NotReadableError');
+            mostrarBannerCamaraFallida();
             return;
         }
 
@@ -530,10 +531,13 @@ document.getElementById('registroForm').addEventListener('submit', async functio
                 mensaje = `✅ ${data.message} - ${data.data ? data.data.empleado : ''}`;
             }
 
-            if (data.data && data.data.jornadasCerradasAutomaticamente && data.data.jornadasCerradasAutomaticamente.length) {
+            if (
+                (data.data && data.data.jornadasCerradasAutomaticamente && data.data.jornadasCerradasAutomaticamente.length) ||
+                data.data?.salida_automatica === 1
+            ) {
                 mensaje +=
                     `<div style="margin-top:10px;padding:10px;background:#fef3c7;border-radius:8px;color:#92400e;font-size:0.95em;">` +
-                    `ℹ️ Se cerró automáticamente una jornada anterior (9.5 h): ${data.data.jornadasCerradasAutomaticamente.join('; ')}` +
+                    CA_TEXTO_SALIDA_AUTO_95 +
                     `</div>`;
             }
 
