@@ -84,6 +84,7 @@ function mostrarAsistencia(registros, area) {
                         <span class="codigo-empleado">${registro.codigo}</span>
                     </div>
                     <span class="movimiento-badge ${movimientoClass}">${registro.movimiento}</span>
+                    ${registro.salida_automatica === 1 ? '<span class="movimiento-badge" style="background:#fef3c7;color:#92400e;margin-left:6px;" title="Salida generada por cierre automático a las 9.5 h">Cierre auto 9.5h</span>' : ''}
                 </div>
                 ${registro.foto ? `
                 <div class="asistencia-foto-container">
@@ -111,8 +112,8 @@ function mostrarAsistencia(registros, area) {
                     ` : ''}
                 </div>
                 <div class="asistencia-actions">
-                    <button class="btn btn-danger btn-sm" onclick="eliminarAsistencia(${registro.id}, '${nombreCompleto.replace(/'/g, "\\'")}', '${registro.fecha}', '${registro.hora}')" title="Eliminar registro">
-                        🗑️ Eliminar
+                    <button class="btn btn-danger btn-sm" onclick="eliminarAsistencia(${registro.id}, '${nombreCompleto.replace(/'/g, "\\'")}', '${registro.fecha}', '${registro.hora}', '${registro.movimiento}')" title="Anular registro">
+                        🗑️ Anular
                     </button>
                 </div>
             </div>
@@ -170,8 +171,16 @@ function ampliarFoto(fotoSrc, nombreEmpleado) {
 }
 
 // Eliminar registro de asistencia
-async function eliminarAsistencia(asistenciaId, nombreEmpleado, fecha, hora) {
-    if (!confirm(`¿Estás seguro de eliminar este registro de asistencia?\n\nEmpleado: ${nombreEmpleado}\nFecha: ${fecha}\nHora: ${hora}\n\nEsta acción no se puede deshacer.`)) {
+async function eliminarAsistencia(asistenciaId, nombreEmpleado, fecha, hora, movimiento) {
+    const avisoJornada =
+        movimiento === 'ENTRADA' || movimiento === 'INGRESO'
+            ? '\n\n⚠️ No se puede anular una ENTRADA con jornada abierta o ya emparejada con SALIDA.'
+            : '\n\n⚠️ Anular una SALIDA puede afectar el cálculo de horas en nómina.';
+    if (
+        !confirm(
+            `¿Anular este registro de asistencia?\n\nEmpleado: ${nombreEmpleado}\nFecha: ${fecha}\nHora: ${hora}\nMovimiento: ${movimiento}${avisoJornada}\n\nEl registro quedará oculto (anulado) pero conservado para auditoría.`
+        )
+    ) {
         return;
     }
 

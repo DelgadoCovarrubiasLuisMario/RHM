@@ -55,13 +55,20 @@ ufw allow 3000/tcp
 ufw allow 3080/tcp
 ufw --force enable
 
+# Token kiosk (tablets) — OBLIGATORIO en producción para POST /api/asistencia/registrar
+if [ -z "$KIOSK_TOKEN" ]; then
+    echo "⚠️  Define KIOSK_TOKEN antes del despliegue (ej. export KIOSK_TOKEN=\$(openssl rand -hex 24))"
+    echo "    Sin esto, el registro de asistencia rechazará checadas en NODE_ENV=production."
+fi
+
 # Iniciar o reiniciar aplicación con PM2
 echo "🚀 Iniciando aplicación..."
 if pm2 list | grep -q "rhm-app"; then
     pm2 restart rhm-app
 else
     # USE_HTTPS=1 (default): tablets pueden usar cámara sin dominio
-    pm2 start backend/server.js --name rhm-app
+    # -i 1: SQLite + locks de asistencia requieren un solo proceso Node
+    pm2 start backend/server.js --name rhm-app -i 1
     pm2 startup
     pm2 save
 fi

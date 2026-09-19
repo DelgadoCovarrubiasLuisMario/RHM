@@ -9,7 +9,7 @@ const bodyParser = require('body-parser');
 const path = require('path');
 const http = require('http');
 const https = require('https');
-const { initDatabase, getDB, migrateAsistenciaTurno4 } = require('./database/db');
+const { initDatabase, getDB, migrateAsistenciaTurno4, migrateAsistenciaPhase1 } = require('./database/db');
 const { obtenerCredencialesHttps, listarIpsLan } = require('./https-cert');
 
 const app = express();
@@ -30,7 +30,10 @@ app.use(express.static(path.join(__dirname, '../frontend')));
 
 // Inicializar base de datos
 initDatabase();
-setTimeout(() => migrateAsistenciaTurno4(), 1000);
+setTimeout(() => {
+    migrateAsistenciaTurno4();
+    migrateAsistenciaPhase1();
+}, 1000);
 
 // Ruta principal - redirige al login
 app.get('/', (req, res) => {

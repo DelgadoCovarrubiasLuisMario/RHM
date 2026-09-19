@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+frontend/js/kiosk-token.local.js
 package-lock.json
 
 # Database
@@ -43,3 +44,4 @@ Prueba*.xlsx
 # Scripts de desarrollo (ya no se usan)
 # backend/scripts/ ya eliminado
 
+backend/scripts/test-*.db

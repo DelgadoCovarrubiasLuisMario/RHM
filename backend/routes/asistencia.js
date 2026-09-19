@@ -1,10 +1,23 @@
 const express = require('express');
 const router = express.Router();
-const { getDB } = require('../database/db');
+const { getDB, runInTransaction, dbRunAsync } = require('../database/db');
 const { resolverEmpleadoDeLista } = require('../lib/resolver-empleado');
 const { requireAdmin } = require('./auth');
+const { requireKiosk } = require('../lib/kiosk-auth');
+const jornada = require('../lib/asistencia-jornada');
 
-/** Evita registros concurrentes del mismo empleado (doble submit / race con auto-cierre). */
+const {
+    esEntrada,
+    parsearFechaHora,
+    compararRegistrosCronologicos,
+    encontrarEntradasAbiertas,
+    entradaParaSalida,
+    calcularTiempoTrabajado,
+    fechaHoraServidorMexico,
+    formatearFechaHoraLocal
+} = jornada;
+
+/** Evita registros concurrentes del mismo empleado entre procesos (complementa transacción SQLite). */
 const locksEmpleado = new Set();
 
 function esperar(ms) {
@@ -27,175 +40,6 @@ function liberarLockEmpleado(empleadoId) {
     locksEmpleado.delete(empleadoId);
 }
 
-/** Valida strings DD/MM/YYYY y hora con formato de pantalla (12h) */
-function esFechaHoraAsistenciaValida(fechaStr, horaStr) {
-    if (!fechaStr || !horaStr || typeof fechaStr !== 'string' || typeof horaStr !== 'string') {
-        return false;
-    }
-    const fecha = fechaStr.trim();
-    const hora = horaStr.trim();
-    if (!/^\d{2}\/\d{2}\/\d{4}$/.test(fecha)) {
-        return false;
-    }
-    const [dia, mes, año] = fecha.split('/').map(Number);
-    if (mes < 1 || mes > 12 || dia < 1 || dia > 31 || año < 2000 || año > 2100) {
-        return false;
-    }
-    if (!hora.match(/\d{1,2}:\d{2}:\d{2}/)) {
-        return false;
-    }
-    const prueba = parsearFechaHora(fecha, hora);
-    return prueba !== null && !Number.isNaN(prueba.getTime());
-}
-
-function obtenerFechaHoraRegistro(fechaCliente, horaCliente) {
-    if (esFechaHoraAsistenciaValida(fechaCliente, horaCliente)) {
-        return { fecha: fechaCliente.trim(), hora: horaCliente.trim() };
-    }
-    const ahora = new Date();
-    const fecha = ahora.toLocaleDateString('es-MX', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-    });
-    const hora = ahora.toLocaleTimeString('es-MX', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true
-    });
-    return { fecha, hora };
-}
-
-function formatearFechaHoraLocal(date) {
-    const fecha = date.toLocaleDateString('es-MX', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-    });
-    const hora = date.toLocaleTimeString('es-MX', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true
-    });
-    return { fecha, hora };
-}
-
-function esEntrada(movimiento) {
-    return movimiento === 'ENTRADA' || movimiento === 'INGRESO';
-}
-
-/** Parsea DD/MM/YYYY + hora 12h (es-MX / AM-PM) a Date real. */
-function parsearFechaHora(fecha, hora) {
-    try {
-        if (!fecha || !hora) return null;
-        const [dia, mes, año] = fecha.split('/');
-        const horaUpper = String(hora).toUpperCase();
-        const esPM = horaUpper.includes('P.M.') || horaUpper.includes('PM') || horaUpper.includes('P. M.');
-        const esAM = horaUpper.includes('A.M.') || horaUpper.includes('AM') || horaUpper.includes('A. M.');
-
-        const partesHora = String(hora).match(/(\d+):(\d+):(\d+)/);
-        if (!partesHora) return null;
-
-        let horas = parseInt(partesHora[1], 10);
-        const minutos = parseInt(partesHora[2], 10);
-        const segundos = parseInt(partesHora[3], 10);
-
-        if (esPM && horas !== 12) {
-            horas += 12;
-        } else if (esAM && horas === 12) {
-            horas = 0;
-        }
-
-        return new Date(parseInt(año, 10), parseInt(mes, 10) - 1, parseInt(dia, 10), horas, minutos, segundos);
-    } catch (error) {
-        console.error('Error al parsear fecha/hora:', fecha, hora, error);
-        return null;
-    }
-}
-
-/** Epoch ms del registro: fecha+hora parseadas; fallback creado_en; luego id. */
-function timestampRegistro(reg) {
-    const parsed = parsearFechaHora(reg.fecha, reg.hora);
-    if (parsed && !Number.isNaN(parsed.getTime())) {
-        return parsed.getTime();
-    }
-    if (reg.creado_en) {
-        const c = new Date(reg.creado_en);
-        if (!Number.isNaN(c.getTime())) return c.getTime();
-    }
-    return Number(reg.id) || 0;
-}
-
-function compararRegistrosCronologicos(a, b) {
-    const ta = timestampRegistro(a);
-    const tb = timestampRegistro(b);
-    if (ta !== tb) return ta - tb;
-    return (Number(a.id) || 0) - (Number(b.id) || 0);
-}
-
-/**
- * Empareja entradas/salidas en orden real (no lexicográfico).
- * Devuelve las entradas que aún no tienen salida posterior.
- */
-function encontrarEntradasAbiertas(registros) {
-    const sorted = [...registros].sort(compararRegistrosCronologicos);
-    const abiertas = [];
-    for (const r of sorted) {
-        if (esEntrada(r.movimiento)) {
-            abiertas.push(r);
-        } else if (r.movimiento === 'SALIDA' && abiertas.length > 0) {
-            abiertas.pop();
-        }
-    }
-    return abiertas;
-}
-
-/** Misma regla que nómina (sueldos.js): bloques de 15 min al más cercano; mínimo 15 min. */
-function redondearABloques15Minutos(horasDecimales) {
-    if (horasDecimales <= 0) return 0;
-    const minutosTotales = horasDecimales * 60;
-    const bloques15Min = Math.round(minutosTotales / 15);
-    if (bloques15Min === 0 && horasDecimales > 0) {
-        return 0.25;
-    }
-    return (bloques15Min * 15) / 60;
-}
-
-function formatearHorasDecimales(horasDecimales) {
-    if (horasDecimales <= 0) return null;
-    const minutosTotales = Math.round(horasDecimales * 60);
-    const horas = Math.floor(minutosTotales / 60);
-    const minutos = minutosTotales % 60;
-    if (horas > 0 && minutos > 0) return `${horas}h ${minutos}m`;
-    if (horas > 0) return `${horas}h`;
-    return `${minutos}m`;
-}
-
-function calcularTiempoTrabajado(fechaEntrada, horaEntrada, fechaSalida, horaSalida) {
-    try {
-        const fechaHoraEntrada = parsearFechaHora(fechaEntrada, horaEntrada);
-        const fechaHoraSalida = parsearFechaHora(fechaSalida, horaSalida);
-
-        if (!fechaHoraEntrada || !fechaHoraSalida) {
-            return null;
-        }
-
-        const diferenciaMs = fechaHoraSalida - fechaHoraEntrada;
-        if (diferenciaMs < 0) {
-            return null;
-        }
-
-        const horasExactas = diferenciaMs / (1000 * 60 * 60);
-        const horasRedondeadas = redondearABloques15Minutos(horasExactas);
-        return formatearHorasDecimales(horasRedondeadas);
-    } catch (error) {
-        console.error('Error al calcular tiempo trabajado:', error);
-        return null;
-    }
-}
-
 function dbAll(db, sql, params = []) {
     return new Promise((resolve, reject) => {
         db.all(sql, params, (err, rows) => {
@@ -214,29 +58,19 @@ function dbGet(db, sql, params = []) {
     });
 }
 
-function dbRun(db, sql, params = []) {
-    return new Promise((resolve, reject) => {
-        db.run(sql, params, function (err) {
-            if (err) reject(err);
-            else resolve({ lastID: this.lastID, changes: this.changes });
-        });
-    });
-}
-
 async function cargarRegistrosEmpleado(db, empleadoId) {
     return dbAll(
         db,
-        `SELECT id, empleado_id, fecha, hora, movimiento, turno, area, creado_en
+        `SELECT id, empleado_id, fecha, hora, movimiento, turno, area, creado_en, salida_automatica, anulado
          FROM asistencia
-         WHERE empleado_id = ?
+         WHERE empleado_id = ? AND (anulado IS NULL OR anulado = 0)
          ORDER BY id ASC`,
         [empleadoId]
     );
 }
 
 /**
- * Cierra jornadas abiertas con ≥ 9.5 h usando comparación Date real
- * (nunca strings 12h). Solo inserta UNA salida por entrada abierta.
+ * Cierra jornadas abiertas con ≥ 9.5 h. Marca salida_automatica = 1.
  */
 function cerrarJornadasAutomaticamente(db, empleadoId = null, opciones = {}) {
     const skipLock = Boolean(opciones.skipLock);
@@ -248,7 +82,7 @@ function cerrarJornadasAutomaticamente(db, empleadoId = null, opciones = {}) {
             const rows = await dbAll(
                 db,
                 `SELECT DISTINCT empleado_id FROM asistencia
-                 WHERE movimiento IN ('ENTRADA', 'INGRESO')`
+                 WHERE movimiento IN ('ENTRADA', 'INGRESO') AND (anulado IS NULL OR anulado = 0)`
             );
             empleadoIds = rows.map((r) => r.empleado_id);
         }
@@ -285,16 +119,21 @@ function cerrarJornadasAutomaticamente(db, empleadoId = null, opciones = {}) {
                     const sigueAbierta = encontrarEntradasAbiertas(registrosFresh).some((e) => e.id === entrada.id);
                     if (!sigueAbierta) continue;
 
-                    await dbRun(
+                    await dbRunAsync(
                         db,
-                        `INSERT INTO asistencia (empleado_id, fecha, hora, movimiento, turno, area)
-                         VALUES (?, ?, ?, 'SALIDA', ?, ?)`,
+                        `INSERT INTO asistencia (empleado_id, fecha, hora, movimiento, turno, area, salida_automatica)
+                         VALUES (?, ?, ?, 'SALIDA', ?, ?, 1)`,
                         [entrada.empleado_id, fechaSalida, horaSalida, entrada.turno, entrada.area]
                     );
 
                     cerradas++;
-                    const emp = await dbGet(db, 'SELECT nombre, apellido FROM empleados WHERE id = ?', [idEmpleado]);
-                    const nombre = emp ? `${emp.nombre} ${emp.apellido}` : `empleado_id=${idEmpleado}`;
+                    let nombre = `empleado_id=${idEmpleado}`;
+                    try {
+                        const emp = await dbGet(db, 'SELECT nombre, apellido FROM empleados WHERE id = ?', [idEmpleado]);
+                        if (emp) nombre = `${emp.nombre} ${emp.apellido}`;
+                    } catch (_e) {
+                        /* base de datos de prueba sin tabla empleados */
+                    }
                     mensajes.push(`${nombre}: Jornada cerrada automáticamente a las 9.5 horas`);
                 }
             } finally {
@@ -312,9 +151,8 @@ function responderError(res, status, message) {
     return res.status(status).json({ success: false, message });
 }
 
-// Registrar asistencia
-router.post('/registrar', async (req, res) => {
-    const { codigo, movimiento, turno, foto, fecha: fechaCliente, hora: horaCliente } = req.body;
+router.post('/registrar', requireKiosk, async (req, res) => {
+    const { codigo, movimiento, turno, foto } = req.body;
     const db = getDB();
 
     if (!codigo || !movimiento || !turno) {
@@ -330,9 +168,8 @@ router.post('/registrar', async (req, res) => {
         return responderError(res, 400, 'Movimiento inválido. Debe ser ENTRADA, SALIDA o INGRESO');
     }
 
-    const { fecha, hora } = obtenerFechaHoraRegistro(fechaCliente, horaCliente);
+    const { fecha, hora } = fechaHoraServidorMexico();
 
-    // Foto obligatoria en entrada y salida (fail-closed)
     if (esEntrada(movimiento) || movimiento === 'SALIDA') {
         if (!foto || typeof foto !== 'string' || foto.length < 100) {
             return responderError(
@@ -364,65 +201,60 @@ router.post('/registrar', async (req, res) => {
     }
 
     try {
-        // Antes de una nueva entrada: cerrar jornadas vencidas (≥9.5h) y esperar
-        if (esEntrada(movimiento)) {
-            try {
+        let tiempoTrabajado = null;
+        let entradaAbierta = null;
+        let insertId = null;
+        let autoCierreMensajes = [];
+
+        await runInTransaction(db, async (run) => {
+            if (esEntrada(movimiento)) {
                 const resultado = await cerrarJornadasAutomaticamente(db, empleado.id, { skipLock: true });
                 if (resultado.cerradas > 0) {
+                    autoCierreMensajes = resultado.mensajes;
                     console.log(
                         `✅ ${resultado.cerradas} jornada(s) cerrada(s) automáticamente para ${empleado.nombre} ${empleado.apellido}`
                     );
                 }
-            } catch (error) {
-                console.error('Error al cerrar jornadas pendientes:', error);
+
+                const registros = await cargarRegistrosEmpleado(db, empleado.id);
+                const abiertas = encontrarEntradasAbiertas(registros);
+                if (abiertas.length > 0) {
+                    const err = new Error('Ya tienes una entrada abierta. Registra SALIDA antes de una nueva entrada.');
+                    err.status = 409;
+                    throw err;
+                }
             }
 
-            const registros = await cargarRegistrosEmpleado(db, empleado.id);
-            const abiertas = encontrarEntradasAbiertas(registros);
-            if (abiertas.length > 0) {
-                return responderError(
-                    res,
-                    409,
-                    'Ya tienes una entrada abierta. Registra SALIDA antes de una nueva entrada.'
+            if (movimiento === 'SALIDA') {
+                const registros = await cargarRegistrosEmpleado(db, empleado.id);
+                const abiertas = encontrarEntradasAbiertas(registros);
+                if (abiertas.length === 0) {
+                    const err = new Error('No hay una entrada abierta para registrar salida.');
+                    err.status = 409;
+                    throw err;
+                }
+                entradaAbierta = abiertas[0];
+                tiempoTrabajado = calcularTiempoTrabajado(
+                    entradaAbierta.fecha,
+                    entradaAbierta.hora,
+                    fecha,
+                    hora
                 );
             }
-        }
 
-        let tiempoTrabajado = null;
-        let entradaAbierta = null;
-
-        if (movimiento === 'SALIDA') {
-            const registros = await cargarRegistrosEmpleado(db, empleado.id);
-            const abiertas = encontrarEntradasAbiertas(registros);
-            if (abiertas.length === 0) {
-                return responderError(
-                    res,
-                    409,
-                    'No hay una entrada abierta para registrar salida.'
-                );
-            }
-            // Emparejar con la entrada abierta más reciente
-            entradaAbierta = abiertas[abiertas.length - 1];
-            tiempoTrabajado = calcularTiempoTrabajado(
-                entradaAbierta.fecha,
-                entradaAbierta.hora,
-                fecha,
-                hora
+            const insert = await run(
+                `INSERT INTO asistencia (empleado_id, fecha, hora, movimiento, turno, area, foto, salida_automatica)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
+                [empleado.id, fecha, hora, movimiento, turnoNum, null, foto || null]
             );
-        }
-
-        const insert = await dbRun(
-            db,
-            `INSERT INTO asistencia (empleado_id, fecha, hora, movimiento, turno, area, foto)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [empleado.id, fecha, hora, movimiento, turnoNum, null, foto || null]
-        );
+            insertId = insert.lastID;
+        });
 
         const respuesta = {
             success: true,
             message: `Asistencia registrada: ${movimiento}`,
             data: {
-                id: insert.lastID,
+                id: insertId,
                 empleado: `${empleado.nombre} ${empleado.apellido}`,
                 fecha,
                 hora,
@@ -437,9 +269,15 @@ router.post('/registrar', async (req, res) => {
         if (entradaAbierta) {
             respuesta.data.entradaId = entradaAbierta.id;
         }
+        if (autoCierreMensajes.length > 0) {
+            respuesta.data.jornadasCerradasAutomaticamente = autoCierreMensajes;
+        }
 
         return res.json(respuesta);
     } catch (err) {
+        if (err.status === 409) {
+            return responderError(res, 409, err.message);
+        }
         console.error('Error al registrar asistencia:', err);
         return responderError(res, 500, 'Error al registrar asistencia: ' + err.message);
     } finally {
@@ -447,15 +285,6 @@ router.post('/registrar', async (req, res) => {
     }
 });
 
-function encontrarEntradaParaSalida(registrosEmpleado, salida) {
-    const anteriores = registrosEmpleado
-        .filter((r) => esEntrada(r.movimiento) && compararRegistrosCronologicos(r, salida) < 0)
-        .sort(compararRegistrosCronologicos);
-    if (anteriores.length === 0) return null;
-    return anteriores[anteriores.length - 1];
-}
-
-// Obtener asistencia completa (admin)
 router.get('/listar', requireAdmin, (req, res) => {
     const { fecha, fecha_inicio, fecha_fin, empleado_id, movimiento } = req.query;
     const db = getDB();
@@ -470,13 +299,14 @@ router.get('/listar', requireAdmin, (req, res) => {
             a.area,
             a.foto,
             a.creado_en,
+            a.salida_automatica,
             e.id as empleado_id,
             e.codigo,
             e.nombre,
             e.apellido
         FROM asistencia a
         INNER JOIN empleados e ON a.empleado_id = e.id
-        WHERE 1=1
+        WHERE (a.anulado IS NULL OR a.anulado = 0)
     `;
     const params = [];
 
@@ -522,7 +352,6 @@ router.get('/listar', requireAdmin, (req, res) => {
         }
     }
 
-    // id es orden de inserción real (evita ORDER BY texto DD/MM + 12h)
     query += ' ORDER BY a.id DESC LIMIT 500';
 
     db.all(query, params, async (err, rows) => {
@@ -543,7 +372,7 @@ router.get('/listar', requireAdmin, (req, res) => {
 
             for (const registro of rows) {
                 if (registro.movimiento !== 'SALIDA') continue;
-                const entrada = encontrarEntradaParaSalida(porEmpleado[registro.empleado_id] || [], registro);
+                const entrada = entradaParaSalida(porEmpleado[registro.empleado_id] || [], registro);
                 if (entrada) {
                     registro.tiempoTrabajado = calcularTiempoTrabajado(
                         entrada.fecha,
@@ -577,12 +406,14 @@ router.get('/cortes-automaticos', requireAdmin, (req, res) => {
             a_salida.fecha as fecha_salida,
             a_salida.hora as hora_salida,
             a_salida.creado_en as creado_salida,
+            a_salida.salida_automatica,
             e.nombre,
             e.apellido,
             e.codigo
          FROM asistencia a_salida
          INNER JOIN empleados e ON a_salida.empleado_id = e.id
          WHERE a_salida.movimiento = 'SALIDA'
+           AND (a_salida.anulado IS NULL OR a_salida.anulado = 0)
          ORDER BY a_salida.id DESC
          LIMIT 300`,
         [],
@@ -595,6 +426,30 @@ router.get('/cortes-automaticos', requireAdmin, (req, res) => {
             const cache = {};
 
             for (const sal of salidas || []) {
+                if (sal.salida_automatica === 1) {
+                    if (!cache[sal.empleado_id]) {
+                        cache[sal.empleado_id] = await cargarRegistrosEmpleado(db, sal.empleado_id);
+                    }
+                    const entrada = entradaParaSalida(cache[sal.empleado_id], {
+                        id: sal.salida_id,
+                        fecha: sal.fecha_salida,
+                        hora: sal.hora_salida,
+                        movimiento: 'SALIDA'
+                    });
+                    cortesAutomaticos.push({
+                        empleado_id: sal.empleado_id,
+                        nombre: sal.nombre,
+                        apellido: sal.apellido,
+                        codigo: sal.codigo,
+                        fecha_entrada: entrada ? entrada.fecha : null,
+                        hora_entrada: entrada ? entrada.hora : null,
+                        fecha_salida: sal.fecha_salida,
+                        hora_salida: sal.hora_salida,
+                        horas_trabajadas: '9.5'
+                    });
+                    continue;
+                }
+
                 const tSalida = parsearFechaHora(sal.fecha_salida, sal.hora_salida);
                 if (!tSalida) continue;
                 if (tSalida.getTime() < hace24h || tSalida.getTime() > ahora.getTime()) continue;
@@ -602,10 +457,11 @@ router.get('/cortes-automaticos', requireAdmin, (req, res) => {
                 if (!cache[sal.empleado_id]) {
                     cache[sal.empleado_id] = await cargarRegistrosEmpleado(db, sal.empleado_id);
                 }
-                const entrada = encontrarEntradaParaSalida(cache[sal.empleado_id], {
+                const entrada = entradaParaSalida(cache[sal.empleado_id], {
                     id: sal.salida_id,
                     fecha: sal.fecha_salida,
-                    hora: sal.hora_salida
+                    hora: sal.hora_salida,
+                    movimiento: 'SALIDA'
                 });
                 if (!entrada) continue;
 
@@ -637,41 +493,71 @@ router.get('/cortes-automaticos', requireAdmin, (req, res) => {
     );
 });
 
-router.delete('/:id', requireAdmin, (req, res) => {
+async function validarEliminacionAsistencia(db, registro) {
+    const registros = await cargarRegistrosEmpleado(db, registro.empleado_id);
+    const abiertas = encontrarEntradasAbiertas(registros);
+
+    if (esEntrada(registro.movimiento)) {
+        const par = jornada.emparejarEntradaSalida(registros).find((p) => p.entrada.id === registro.id);
+        if (par && par.salida) {
+            return {
+                ok: false,
+                message:
+                    'No se puede eliminar esta ENTRADA porque ya tiene una SALIDA emparejada. Anula primero la salida o corrige desde nómina con soporte.'
+            };
+        }
+        if (abiertas.some((e) => e.id === registro.id)) {
+            return {
+                ok: false,
+                message:
+                    'No se puede eliminar la ENTRADA de una jornada abierta. Registra SALIDA o espera el cierre automático (9.5 h).'
+            };
+        }
+    }
+
+    return { ok: true };
+}
+
+router.delete('/:id', requireAdmin, async (req, res) => {
     const { id } = req.params;
     const db = getDB();
 
-    db.get(
-        `SELECT a.id, a.fecha, a.hora, a.movimiento, e.nombre || ' ' || e.apellido as nombre_empleado
-         FROM asistencia a
-         INNER JOIN empleados e ON a.empleado_id = e.id
-         WHERE a.id = ?`,
-        [id],
-        (err, registro) => {
-            if (err) {
-                return responderError(res, 500, 'Error al obtener información del registro: ' + err.message);
-            }
+    try {
+        const registro = await dbGet(
+            db,
+            `SELECT a.id, a.empleado_id, a.fecha, a.hora, a.movimiento, e.nombre || ' ' || e.apellido as nombre_empleado
+             FROM asistencia a
+             INNER JOIN empleados e ON a.empleado_id = e.id
+             WHERE a.id = ? AND (a.anulado IS NULL OR a.anulado = 0)`,
+            [id]
+        );
 
-            if (!registro) {
-                return responderError(res, 404, 'Registro de asistencia no encontrado');
-            }
-
-            db.run(`DELETE FROM asistencia WHERE id = ?`, [id], function (errDelete) {
-                if (errDelete) {
-                    return responderError(res, 500, 'Error al eliminar registro: ' + errDelete.message);
-                }
-
-                if (this.changes === 0) {
-                    return responderError(res, 404, 'Registro no encontrado');
-                }
-
-                res.json({
-                    success: true,
-                    message: `Registro de asistencia eliminado para ${registro.nombre_empleado} (${registro.fecha} ${registro.hora})`
-                });
-            });
+        if (!registro) {
+            return responderError(res, 404, 'Registro de asistencia no encontrado');
         }
-    );
+
+        const validacion = await validarEliminacionAsistencia(db, registro);
+        if (!validacion.ok) {
+            return responderError(res, 409, validacion.message);
+        }
+
+        const result = await dbRunAsync(
+            db,
+            `UPDATE asistencia SET anulado = 1 WHERE id = ?`,
+            [id]
+        );
+
+        if (result.changes === 0) {
+            return responderError(res, 404, 'Registro no encontrado');
+        }
+
+        res.json({
+            success: true,
+            message: `Registro de asistencia anulado para ${registro.nombre_empleado} (${registro.fecha} ${registro.hora}). Los datos se conservan para auditoría pero ya no cuentan en jornada ni nómina.`
+        });
+    } catch (errDelete) {
+        return responderError(res, 500, 'Error al anular registro: ' + errDelete.message);
+    }
 });
 
 module.exports = router;

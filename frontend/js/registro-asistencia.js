@@ -266,9 +266,41 @@ function iniciarPromesaStreamEntrada() {
     }
     return solicitarStreamCamara().catch((err) => {
         console.warn('⚠️ Error al abrir cámara:', err);
+        mensajeErrorCamara(err && err.message ? err.message : 'Error desconocido', err && err.name);
         return null;
     });
 }
+
+function mensajeErrorCamara(detalle, nombreError) {
+    const host = window.location.hostname;
+    let ayuda =
+        'La foto es obligatoria para checar. Revisa permisos de cámara y vuelve a intentar.';
+    if (!esContextoSeguroParaCamara()) {
+        ayuda =
+            `Abre en la tablet <strong>https://${host}</strong>, acepta el certificado (Avanzado → Continuar) y vuelve a guardar. Sin HTTPS el navegador bloquea la cámara.`;
+    } else if (nombreError === 'NotAllowedError' || nombreError === 'PermissionDeniedError') {
+        ayuda =
+            'Permiso denegado: en Chrome toca el ícono del candado en la barra de dirección → Cámara → Permitir, luego pulsa «Reintentar captura».';
+    } else if (nombreError === 'NotFoundError' || nombreError === 'DevicesNotFoundError') {
+        ayuda = 'No se detectó cámara en este dispositivo. Usa una tablet con cámara frontal o revisa que no esté ocupada por otra app.';
+    } else if (nombreError === 'NotReadableError' || nombreError === 'TrackStartError') {
+        ayuda = 'La cámara está en uso o falló al iniciar. Cierra otras apps que usen la cámara y reintenta.';
+    }
+    mostrarMensaje(
+        `❌ <strong>No se pudo abrir la cámara.</strong><br>${ayuda}` +
+            (detalle ? `<br><small>${detalle}</small>` : '') +
+            `<br><button type="button" class="btn btn-primary" style="margin-top:12px" onclick="reintentarRegistroConCamara()">Reintentar captura</button>`,
+        'error'
+    );
+}
+
+function reintentarRegistroConCamara() {
+    const form = document.getElementById('registroForm');
+    if (form) {
+        form.requestSubmit();
+    }
+}
+window.reintentarRegistroConCamara = reintentarRegistroConCamara;
 
 function detenerStreamSiExiste(s) {
     if (s && s.getTracks) {
@@ -346,7 +378,7 @@ async function capturarFotoConStreamPendiente(promesaStream) {
     try {
         const mediaStream = await promesaStream;
         if (!mediaStream) {
-            mostrarMensaje('⚠️ No se pudo tomar foto (permiso de cámara o dispositivo). La foto es obligatoria.', 'error');
+            mensajeErrorCamara('No se obtuvo stream de video.', 'NotReadableError');
             return null;
         }
         stream = mediaStream;
@@ -381,7 +413,7 @@ async function capturarFotoConStreamPendiente(promesaStream) {
     } catch (error) {
         console.error('❌ Error al capturar foto:', error);
         detenerCamara();
-        mostrarMensaje('⚠️ No se pudo tomar foto en este dispositivo. La foto es obligatoria.', 'error');
+        mensajeErrorCamara(error && error.message ? error.message : 'Error al capturar', error && error.name);
         return null;
     }
 }
@@ -460,23 +492,25 @@ document.getElementById('registroForm').addEventListener('submit', async functio
         }
 
         if (!fotoBase64 || fotoBase64.length < 100) {
-            mostrarMensaje('❌ La foto es obligatoria para registrar ingreso y salida. Usa HTTPS y permite la cámara.', 'error');
+            mensajeErrorCamara('La captura quedó vacía.', 'NotReadableError');
             return;
         }
 
         const apiURL = window.API_CONFIG ? window.API_CONFIG.getBaseURL() : 'http://localhost:3000';
+        const kioskHeaders = window.API_CONFIG && window.API_CONFIG.getKioskHeaders
+            ? window.API_CONFIG.getKioskHeaders()
+            : {};
         const response = await fetch(`${apiURL}/api/asistencia/registrar`, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                ...kioskHeaders
             },
             body: JSON.stringify({
                 codigo,
                 movimiento,
                 turno: parseInt(turno, 10),
-                foto: fotoBase64,
-                fecha: document.getElementById('fecha').value,
-                hora: document.getElementById('hora').value
+                foto: fotoBase64
             })
         });
 
@@ -496,6 +530,13 @@ document.getElementById('registroForm').addEventListener('submit', async functio
                 mensaje = `✅ ${data.message} - ${data.data ? data.data.empleado : ''}`;
             }
 
+            if (data.data && data.data.jornadasCerradasAutomaticamente && data.data.jornadasCerradasAutomaticamente.length) {
+                mensaje +=
+                    `<div style="margin-top:10px;padding:10px;background:#fef3c7;border-radius:8px;color:#92400e;font-size:0.95em;">` +
+                    `ℹ️ Se cerró automáticamente una jornada anterior (9.5 h): ${data.data.jornadasCerradasAutomaticamente.join('; ')}` +
+                    `</div>`;
+            }
+
             mostrarMensaje(mensaje, 'success');
             document.getElementById('codigo').value = '';
             document.getElementById('listaEmpleados').style.display = 'none';
@@ -504,12 +545,17 @@ document.getElementById('registroForm').addEventListener('submit', async functio
                 const codigoInput = document.getElementById('codigo');
                 if (codigoInput) codigoInput.focus();
             }, 200);
+        } else if (response.status === 401) {
+            mostrarMensaje(
+                `❌ ${data.message || 'Token de kiosk inválido.'}<br>Configura el mismo valor que <code>KIOSK_TOKEN</code> en la tablet (ver README).`,
+                'error'
+            );
         } else {
             mostrarMensaje(`❌ ${data.message}`, 'error');
         }
     } catch (error) {
         console.error('Error:', error);
-        mostrarMensaje('❌ Error de conexión. Verifica que el servidor esté corriendo.', 'error');
+        mostrarMensaje('❌ Error de conexión. Verifica HTTPS, red Wi‑Fi y que el servidor esté corriendo.', 'error');
     } finally {
         registrando = false;
         submitBtn.disabled = false;

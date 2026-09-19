@@ -1,110 +1,100 @@
 # RHM - Sistema de Recursos Humanos
 
-Sistema web para gestión de recursos humanos con registro de asistencia por código QR.
+Sistema web para gestión de recursos humanos con **registro de asistencia en tablet** (código o nombre del empleado + foto).
 **RHM - Operación para tu empresa**
 
 ## Características
 
-- Panel de administración
-- Vista de empleado para tablets
-- Registro de asistencia con QR
-- Cálculo de horas y sueldos
+- Panel de administración (JWT)
+- Vista de empleado / kiosk para tablets
+- Registro de asistencia con foto obligatoria (entrada y salida)
+- Cálculo de horas y sueldos (misma lógica de emparejamiento que checadas)
 - Gestión de vacaciones y nómina
-- Diseño responsive (funciona en cualquier pantalla)
-- Sincronización en tiempo real entre dispositivos
+- Diseño responsive
 
-## Instalación Local
+**No incluye:** escaneo QR en el flujo de checada, modo offline ni sincronización en tiempo real entre dispositivos. Los datos viven en el servidor SQLite; las tablets solo envían checadas por HTTPS.
+
+## Instalación local
 
 1. Instalar dependencias:
+
 ```bash
 npm install
 ```
 
-2. Iniciar el servidor:
+2. Variables opcionales en desarrollo:
+
+```bash
+# Hora de checadas (por defecto America/Mexico_City en server.js)
+export TZ=America/Mexico_City
+# Token para tablets (opcional en dev; obligatorio en producción)
+export KIOSK_TOKEN=dev-kiosk-secreto
+```
+
+3. Iniciar el servidor:
+
 ```bash
 npm start
 ```
 
-3. Abrir en el navegador:
-```
-http://localhost:3000
-```
+4. Abrir en el navegador: `http://localhost:3000`
 
-## 🚀 Despliegue en DigitalOcean
+5. Pruebas de jornada / nómina:
 
-El proyecto está listo para desplegar en DigitalOcean ($4/mes).
-
-**Guía completa:** Ver `GUIA_DIGITALOCEAN.md`
-
-**Despliegue rápido:**
 ```bash
-# En el servidor DigitalOcean
-curl -o deploy.sh https://raw.githubusercontent.com/DelgadoCovarrubiasLuisMario/RHM/main/deploy.sh
-chmod +x deploy.sh
-bash deploy.sh
+npm test
 ```
 
-## Despliegue en DigitalOcean ($4/mes)
+## Flujo kiosk (tablets)
 
-DigitalOcean ofrece servidores VPS confiables y económicos.
+1. Desplegar el servidor con **HTTPS** (por defecto `USE_HTTPS` activo). La cámara en Chrome **no funciona** con `http://IP` salvo localhost.
+2. En el servidor, definir `KIOSK_TOKEN` (secreto largo aleatorio).
+3. En cada tablet, configurar el mismo token:
+   - Copiar `frontend/js/kiosk-token.example.js` → `frontend/js/kiosk-token.local.js` y pegar el secreto, **o**
+   - En la consola del navegador: `localStorage.setItem('rhm_kiosk_token', 'TU_TOKEN')`
+4. Abrir `https://TU_IP:3000` → menú empleado → **Registro de asistencia**.
+5. Las checadas usan **fecha y hora del servidor** (zona `America/Mexico_City`), no el reloj de la tablet.
 
-### Pasos para desplegar:
+Las peticiones a `POST /api/asistencia/registrar` deben enviar el header:
 
-1. **Crear cuenta en DigitalOcean:**
-   - Ve a https://www.digitalocean.com
-   - Regístrate y verifica tu email
-   - Agrega método de pago
+`X-Kiosk-Token: <mismo valor que KIOSK_TOKEN>`
 
-2. **Crear Droplet:**
-   - Haz clic en "Create" → "Droplets"
-   - Imagen: Ubuntu 22.04 (LTS)
-   - Plan: Basic ($4/mes - 512 MB RAM, 1 CPU, 10 GB SSD)
-   - Región: La más cercana a tu ubicación
-   - Crear Droplet
+## Despliegue (DigitalOcean / PM2)
 
-3. **Conectar al servidor:**
-   - Conecta por SSH: `ssh root@TU_IP_DROPLET`
-   - O usa PuTTY en Windows
+Ver `deploy.sh`. Puntos críticos para asistencia:
 
-4. **Desplegar aplicación:**
-   - Sigue la guía completa en `GUIA_DIGITALOCEAN.md`
-   - O ejecuta el script: `bash deploy.sh`
+- **Una sola instancia PM2** (`-i 1`): SQLite y locks en memoria no son seguros con varios procesos Node compitiendo por la misma base de datos.
+- Definir en el entorno del proceso:
 
-5. **Acceder a la aplicación:**
-   - URL: `http://TU_IP_DROPLET:3000`
-   - O configura un dominio (opcional)
+```bash
+export KIOSK_TOKEN='genera-un-secreto-largo'
+export NODE_ENV=production
+export TZ=America/Mexico_City
+pm2 start backend/server.js --name rhm-app -i 1
+```
 
-### Alternativa: Servidor Local (Gratis)
+- Puertos: HTTPS `3000`, redirect HTTP `3080` (ver logs al arrancar).
 
-Si prefieres no pagar hosting:
-- Instalar en una PC servidor de la empresa
-- 100% Gratis
-- Datos quedan en la empresa
-- Ver `GUIA_SERVIDOR_LOCAL.md` (si existe)
-
-## Estructura del Proyecto
+## Estructura del proyecto
 
 ```
-apprhr/
 ├── frontend/          # Interfaz web (HTML/CSS/JS)
-│   ├── admin/        # Panel de administración
-│   ├── empleado/     # Vista de empleado (tablets)
-│   ├── js/           # JavaScript
-│   └── styles/       # CSS
-├── backend/          # API Node.js
-│   ├── routes/       # Rutas de la API
-│   ├── database/     # Configuración de base de datos
-│   └── server.js     # Servidor principal
-└── database/         # SQLite (archivo .db)
+│   ├── admin/         # Panel de administración
+│   ├── empleado/      # Registro en tablet
+│   └── js/
+├── backend/           # API Node.js
+│   ├── routes/
+│   ├── lib/           # Lógica compartida (jornadas, kiosk)
+│   └── server.js
+└── database/          # SQLite (rhr.db)
 ```
 
-## Credenciales por Defecto
+## Credenciales por defecto
 
-- **Admin:** usuario=`admin`, password=`admin123`
-- **Empleados:** Usar códigos QR generados
+- **Admin:** usuario `admin`, contraseña `admin123` (cambiar en producción con `npm run set-admin-password`)
 
-## Notas
+## Notas de operación
 
-- La base de datos SQLite se crea automáticamente
-- Los datos se sincronizan entre todos los dispositivos
-- Funciona offline en tablets (guarda localmente y sincroniza después)
+- Cierre automático de jornada a **9.5 h** sin salida manual; en admin aparece la etiqueta «Cierre auto 9.5h».
+- Eliminar checadas en admin es **anulación** (soft delete); entradas con jornada abierta o ya emparejadas no se pueden anular.
+- La base de datos SQLite se crea al iniciar el servidor.
