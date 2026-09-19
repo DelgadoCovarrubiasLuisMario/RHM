@@ -50,8 +50,9 @@ npm test
 1. Desplegar el servidor con **HTTPS** (por defecto `USE_HTTPS` activo). La cámara en Chrome **no funciona** con `http://IP` salvo localhost.
 2. En el servidor, definir `KIOSK_TOKEN` (secreto largo aleatorio).
 3. En cada tablet, configurar el mismo token:
-   - Copiar `frontend/js/kiosk-token.example.js` → `frontend/js/kiosk-token.local.js` y pegar el secreto, **o**
-   - En la consola del navegador: `localStorage.setItem('rhm_kiosk_token', 'TU_TOKEN')`
+   - **Despliegue:** `deploy.sh` genera `frontend/js/kiosk-token.local.js` desde `KIOSK_TOKEN` (gitignored).
+   - **Manual:** copiar `frontend/js/kiosk-token.example.js` → `kiosk-token.local.js`, **o** `localStorage.setItem('rhm_kiosk_token', 'TU_TOKEN')`.
+   - La página carga el archivo local de forma **opcional** (`kiosk-token-loader.js`); si falta token y el servidor lo exige, se muestra un aviso antes de checar.
 4. Abrir `https://TU_IP:3000` → menú empleado → **Registro de asistencia**.
 5. Las checadas usan **fecha y hora del servidor** (zona `America/Mexico_City`), no el reloj de la tablet.
 

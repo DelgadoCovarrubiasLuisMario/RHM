@@ -3,7 +3,7 @@ const router = express.Router();
 const { getDB, runInTransaction, dbRunAsync } = require('../database/db');
 const { resolverEmpleadoDeLista } = require('../lib/resolver-empleado');
 const { requireAdmin } = require('./auth');
-const { requireKiosk } = require('../lib/kiosk-auth');
+const { requireKiosk, obtenerKioskTokenEsperado } = require('../lib/kiosk-auth');
 const jornada = require('../lib/asistencia-jornada');
 
 const {
@@ -150,6 +150,17 @@ function cerrarJornadasAutomaticamente(db, empleadoId = null, opciones = {}) {
 function responderError(res, status, message) {
     return res.status(status).json({ success: false, message });
 }
+
+/** Indica si la tablet debe enviar X-Kiosk-Token (sin revelar el secreto). */
+router.get('/kiosk-config', (req, res) => {
+    const tieneTokenServidor = Boolean(obtenerKioskTokenEsperado());
+    const requiresToken =
+        tieneTokenServidor || process.env.NODE_ENV === 'production';
+    return res.json({
+        success: true,
+        requiresToken
+    });
+});
 
 router.post('/registrar', requireKiosk, async (req, res) => {
     const { codigo, movimiento, turno, foto } = req.body;

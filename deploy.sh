@@ -59,6 +59,11 @@ ufw --force enable
 if [ -z "$KIOSK_TOKEN" ]; then
     echo "⚠️  Define KIOSK_TOKEN antes del despliegue (ej. export KIOSK_TOKEN=\$(openssl rand -hex 24))"
     echo "    Sin esto, el registro de asistencia rechazará checadas en NODE_ENV=production."
+else
+    echo "🔑 Generando frontend/js/kiosk-token.local.js para tablets..."
+    export KIOSK_TOKEN
+    node -e "const fs=require('fs');const t=process.env.KIOSK_TOKEN||'';fs.writeFileSync('frontend/js/kiosk-token.local.js','window.__RHM_KIOSK_TOKEN__='+JSON.stringify(t)+';\\n');"
+    echo "✅ Token kiosk escrito en frontend/js/kiosk-token.local.js (gitignored)"
 fi
 
 # Iniciar o reiniciar aplicación con PM2

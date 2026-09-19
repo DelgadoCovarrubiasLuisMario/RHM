@@ -3,6 +3,8 @@ const CA_TEXTO_CAMARA_FALLIDA =
     'No se pudo usar la cámara. Abre la app con la dirección segura (candado) o pide ayuda a un admin.';
 const CA_TEXTO_SALIDA_AUTO_95 =
     'Salida registrada automáticamente (jornada de 9.5 h).';
+const TEXTO_KIOSK_TOKEN_FALTANTE =
+    'No se puede checar desde esta tablet: falta configurar el acceso de kiosk. Pide a un administrador que defina KIOSK_TOKEN en el servidor y el mismo valor en esta tablet (despliegue o archivo kiosk-token.local.js).';
 
 // Variables globales
 let movimientoSeleccionado = null;
@@ -11,11 +13,17 @@ let todosLosEmpleados = [];
 let stream = null;
 let videoElement = null;
 let registrando = false;
+let kioskRequiereToken = false;
+let kioskConfigCargada = false;
 
 // Inicializar página
 document.addEventListener('DOMContentLoaded', function() {
     // Cargar empleados para la búsqueda
     cargarEmpleados();
+
+    cargarConfigKiosk().then(() => {
+        setTimeout(verificarBannerTokenKiosk, 50);
+    });
 
     // Aviso fijo si no hay HTTPS (causa típica en despliegue con http://IP)
     avisarSiCamaraNoDisponible();
@@ -46,6 +54,70 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 });
+
+async function cargarConfigKiosk() {
+    try {
+        const apiURL = window.API_CONFIG ? window.API_CONFIG.getBaseURL() : 'http://localhost:3000';
+        const response = await fetch(`${apiURL}/api/asistencia/kiosk-config`);
+        const data = await response.json();
+        if (data.success) {
+            kioskRequiereToken = Boolean(data.requiresToken);
+        }
+    } catch (error) {
+        console.warn('No se pudo cargar kiosk-config:', error);
+    } finally {
+        kioskConfigCargada = true;
+    }
+}
+
+async function asegurarConfigKiosk() {
+    if (!kioskConfigCargada) {
+        await cargarConfigKiosk();
+    }
+}
+
+function tokenKioskListoParaRegistrar() {
+    if (!kioskRequiereToken) {
+        return true;
+    }
+    const token =
+        window.API_CONFIG && window.API_CONFIG.getKioskToken
+            ? window.API_CONFIG.getKioskToken()
+            : '';
+    return Boolean(token && String(token).trim());
+}
+
+function mostrarBannerTokenKioskFaltante() {
+    const aviso = document.getElementById('avisoKioskToken');
+    if (!aviso) {
+        mostrarMensaje(TEXTO_KIOSK_TOKEN_FALTANTE, 'error');
+        return;
+    }
+    aviso.className = 'mensaje mensaje-error';
+    aviso.style.display = 'block';
+    aviso.innerHTML =
+        `<p style="margin:0 0 12px 0;">${TEXTO_KIOSK_TOKEN_FALTANTE}</p>` +
+        `<button type="button" class="btn btn-secondary" onclick="cerrarBannerTokenKiosk()">Cerrar</button>`;
+}
+
+function cerrarBannerTokenKiosk() {
+    const aviso = document.getElementById('avisoKioskToken');
+    if (aviso) {
+        aviso.style.display = 'none';
+        aviso.innerHTML = '';
+    }
+}
+
+function verificarBannerTokenKiosk() {
+    if (!kioskRequiereToken || tokenKioskListoParaRegistrar()) {
+        cerrarBannerTokenKiosk();
+        return;
+    }
+    mostrarBannerTokenKioskFaltante();
+}
+
+window.verificarBannerTokenKiosk = verificarBannerTokenKiosk;
+window.cerrarBannerTokenKiosk = cerrarBannerTokenKiosk;
 
 function avisarSiCamaraNoDisponible() {
     const sinApi =
@@ -464,6 +536,12 @@ document.getElementById('registroForm').addEventListener('submit', async functio
     }
     if (!turno) {
         mostrarMensaje('Selecciona el turno', 'error');
+        return;
+    }
+
+    await asegurarConfigKiosk();
+    if (!tokenKioskListoParaRegistrar()) {
+        mostrarBannerTokenKioskFaltante();
         return;
     }
 
