@@ -4,7 +4,14 @@ const { getDB, runInTransaction, dbRunAsync } = require('../database/db');
 const { resolverEmpleadoDeLista } = require('../lib/resolver-empleado');
 const { requireAdmin } = require('./auth');
 const { requireKiosk, obtenerKioskTokenEsperado } = require('../lib/kiosk-auth');
+const { claveFechaOrden } = require('../lib/fechas');
 const jornada = require('../lib/asistencia-jornada');
+
+/** Máximo de días en un rango de listado admin (evita IN con miles de fechas). */
+const MAX_DIAS_RANGO_LISTAR = 366;
+
+const SQL_FECHA_ORDENABLE =
+    "(substr(a.fecha, 7, 4) || substr(a.fecha, 4, 2) || substr(a.fecha, 1, 2))";
 
 const {
     esEntrada,
@@ -147,6 +154,15 @@ function cerrarJornadasAutomaticamente(db, empleadoId = null, opciones = {}) {
 
 function responderError(res, status, message) {
     return res.status(status).json({ success: false, message });
+}
+
+function diasEnRangoInclusive(fechaInicio, fechaFin) {
+    const [diaI, mesI, añoI] = fechaInicio.split('/').map(Number);
+    const [diaF, mesF, añoF] = fechaFin.split('/').map(Number);
+    const inicio = new Date(añoI, mesI - 1, diaI);
+    const fin = new Date(añoF, mesF - 1, diaF);
+    const diff = Math.floor((fin - inicio) / (1000 * 60 * 60 * 24));
+    return diff + 1;
 }
 
 /** Indica si la tablet debe enviar X-Kiosk-Token (sin revelar el secreto). */
@@ -293,8 +309,9 @@ router.post('/registrar', requireKiosk, async (req, res) => {
 });
 
 router.get('/listar', requireAdmin, (req, res) => {
-    const { fecha, fecha_inicio, fecha_fin, empleado_id, movimiento } = req.query;
+    const { fecha, fecha_inicio, fecha_fin, empleado_id, movimiento, incluir_foto } = req.query;
     const db = getDB();
+    const conFoto = incluir_foto === '1' || incluir_foto === 'true';
 
     let query = `
         SELECT 
@@ -304,7 +321,8 @@ router.get('/listar', requireAdmin, (req, res) => {
             a.movimiento,
             a.turno,
             a.area,
-            a.foto,
+            ${conFoto ? 'a.foto,' : ''}
+            CASE WHEN a.foto IS NOT NULL AND TRIM(a.foto) != '' THEN 1 ELSE 0 END AS tiene_foto,
             a.creado_en,
             a.salida_automatica,
             e.id as empleado_id,
@@ -323,26 +341,24 @@ router.get('/listar', requireAdmin, (req, res) => {
     }
 
     if (fecha_inicio && fecha_fin) {
-        const fechasEnRango = [];
-        const [diaInicio, mesInicio, añoInicio] = fecha_inicio.split('/').map(Number);
-        const [diaFin, mesFin, añoFin] = fecha_fin.split('/').map(Number);
-
-        const inicio = new Date(añoInicio, mesInicio - 1, diaInicio);
-        const fin = new Date(añoFin, mesFin - 1, diaFin);
-
-        const fechaActual = new Date(inicio);
-        while (fechaActual <= fin) {
-            const dia = String(fechaActual.getDate()).padStart(2, '0');
-            const mes = String(fechaActual.getMonth() + 1).padStart(2, '0');
-            const año = fechaActual.getFullYear();
-            fechasEnRango.push(`${dia}/${mes}/${año}`);
-            fechaActual.setDate(fechaActual.getDate() + 1);
+        const claveInicio = claveFechaOrden(fecha_inicio);
+        const claveFin = claveFechaOrden(fecha_fin);
+        if (!claveInicio || !claveFin) {
+            return responderError(res, 400, 'fecha_inicio y fecha_fin deben ser DD/MM/YYYY');
         }
-
-        if (fechasEnRango.length > 0) {
-            query += ' AND a.fecha IN (' + fechasEnRango.map(() => '?').join(',') + ')';
-            params.push(...fechasEnRango);
+        if (claveInicio > claveFin) {
+            return responderError(res, 400, 'fecha_inicio no puede ser posterior a fecha_fin');
         }
+        const dias = diasEnRangoInclusive(fecha_inicio, fecha_fin);
+        if (dias > MAX_DIAS_RANGO_LISTAR) {
+            return responderError(
+                res,
+                400,
+                `El rango no puede superar ${MAX_DIAS_RANGO_LISTAR} días (solicitado: ${dias}). Acota las fechas.`
+            );
+        }
+        query += ` AND ${SQL_FECHA_ORDENABLE} >= ? AND ${SQL_FECHA_ORDENABLE} <= ?`;
+        params.push(claveInicio, claveFin);
     }
 
     if (empleado_id) {
@@ -371,7 +387,9 @@ router.get('/listar', requireAdmin, (req, res) => {
         }
 
         try {
-            const empleadoIds = [...new Set(rows.map((r) => r.empleado_id))];
+            const empleadoIds = [
+                ...new Set(rows.filter((r) => r.movimiento === 'SALIDA').map((r) => r.empleado_id))
+            ];
             const porEmpleado = {};
             for (const eid of empleadoIds) {
                 porEmpleado[eid] = await cargarRegistrosEmpleado(db, eid);
@@ -524,6 +542,30 @@ async function validarEliminacionAsistencia(db, registro) {
 
     return { ok: true };
 }
+
+router.get('/registro/:id/foto', requireAdmin, async (req, res) => {
+    const { id } = req.params;
+    const db = getDB();
+
+    try {
+        const row = await dbGet(
+            db,
+            `SELECT a.id, a.foto
+             FROM asistencia a
+             WHERE a.id = ? AND (a.anulado IS NULL OR a.anulado = 0)`,
+            [id]
+        );
+        if (!row) {
+            return responderError(res, 404, 'Registro de asistencia no encontrado');
+        }
+        if (!row.foto || !String(row.foto).trim()) {
+            return responderError(res, 404, 'Este registro no tiene foto');
+        }
+        return res.json({ success: true, id: row.id, foto: row.foto });
+    } catch (err) {
+        return responderError(res, 500, 'Error al obtener foto: ' + err.message);
+    }
+});
 
 router.delete('/:id', requireAdmin, async (req, res) => {
     const { id } = req.params;

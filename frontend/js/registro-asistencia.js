@@ -26,7 +26,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Aviso fijo si no hay HTTPS (causa típica en despliegue con http://IP)
     avisarSiCamaraNoDisponible();
 
-    // Actualizar fecha y hora cada segundo
+    // Reloj en pantalla (solo referencia; POST /registrar no envía fecha/hora del cliente).
     actualizarFechaHora();
     setInterval(actualizarFechaHora, 1000);
 
@@ -228,7 +228,7 @@ function resolverCodigoEmpleado(dato) {
     return window.resolverEmpleadoDeLista(todosLosEmpleados, dato);
 }
 
-// Actualizar fecha y hora en tiempo real
+/** Muestra reloj local en #fecha / #hora; la checada autoritativa es la del servidor. */
 function actualizarFechaHora() {
     const ahora = new Date();
     
@@ -296,7 +296,6 @@ async function solicitarStreamCamara() {
             return await navigator.mediaDevices.getUserMedia(constraints);
         } catch (error) {
             ultimoError = error;
-            console.warn('⚠️ Intento de cámara fallido con constraints:', constraints, error);
         }
     }
 
@@ -456,9 +455,7 @@ async function capturarFotoConStreamPendiente(promesaStream) {
         await esperarVideoConDimensiones(video);
         const playP = video.play();
         if (playP !== undefined) {
-            await playP.catch((e) => {
-                console.warn('video.play:', e);
-            });
+            await playP.catch(() => {});
         }
         await new Promise(requestAnimationFrame);
         // Reducir tamaño para no saturar el POST JSON (base64 crece ~33%)
@@ -524,7 +521,7 @@ document.getElementById('registroForm').addEventListener('submit', async functio
     const codigo = resuelto.empleado.codigo;
     document.getElementById('codigo').value = codigo;
     if (!movimiento) {
-        mostrarMensaje('Selecciona INGRESO o SALIDA', 'error');
+        mostrarMensaje('Selecciona ENTRADA o SALIDA', 'error');
         return;
     }
     if (!turno) {

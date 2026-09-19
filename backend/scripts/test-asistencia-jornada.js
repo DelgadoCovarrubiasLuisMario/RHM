@@ -21,6 +21,7 @@ const {
     registroAnulado
 } = jornada;
 const { obtenerKioskTokenEsperado, tokenKioskEnRequest } = require('../lib/kiosk-auth');
+const { claveFechaOrden } = require('../lib/fechas');
 
 
 function ok(name) {
@@ -121,6 +122,12 @@ function ok(name) {
     assert.strictEqual(registroAnulado(entradaAnulada), true);
     assert.strictEqual(encontrarEntradasAbiertas([entradaAnulada]).length, 0);
     ok('entrada anulada no deja jornada abierta');
+}
+
+{
+    assert.ok(claveFechaOrden('15/03/2026') >= claveFechaOrden('01/03/2026'));
+    assert.ok(claveFechaOrden('01/03/2026') <= claveFechaOrden('31/03/2026'));
+    ok('claveFechaOrden usable para filtro de rango en listar');
 }
 
 {

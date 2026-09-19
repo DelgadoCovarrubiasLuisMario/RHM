@@ -26,20 +26,21 @@
             <form id="registroForm" class="attendance-form">
                 <!-- Fecha -->
                 <div class="form-group">
-                    <label for="fecha">Fecha</label>
+                    <label for="fecha">Fecha (referencia en tablet)</label>
                     <div class="input-with-icon">
-                        <input type="text" id="fecha" readonly>
+                        <input type="text" id="fecha" readonly aria-readonly="true">
                         <span class="input-icon">📅</span>
                     </div>
                 </div>
 
                 <!-- Hora -->
                 <div class="form-group">
-                    <label for="hora">Hora</label>
+                    <label for="hora">Hora (referencia en tablet)</label>
                     <div class="input-with-icon">
-                        <input type="text" id="hora" readonly>
+                        <input type="text" id="hora" readonly aria-readonly="true">
                         <span class="input-icon">🕐</span>
                     </div>
+                    <small class="help-text">Solo referencia visual; la checada guarda fecha y hora del servidor.</small>
                 </div>
 
                 <!-- Código o nombre -->
@@ -57,7 +58,7 @@
                     <label>Movimiento *</label>
                     <div class="movimiento-buttons">
                         <button type="button" class="movimiento-btn" data-movimiento="ENTRADA" onclick="seleccionarMovimiento('ENTRADA')">
-                            INGRESO
+                            ENTRADA
                         </button>
                         <button type="button" class="movimiento-btn" data-movimiento="SALIDA" onclick="seleccionarMovimiento('SALIDA')">
                             SALIDA
