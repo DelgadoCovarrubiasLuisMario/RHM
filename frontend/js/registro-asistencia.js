@@ -559,7 +559,7 @@ document.getElementById('registroForm').addEventListener('submit', async functio
         }
     } catch (error) {
         console.error('Error:', error);
-        mostrarMensaje('❌ Error de conexión. Verifica HTTPS, red Wi‑Fi y que el servidor esté corriendo.', 'error');
+        mostrarMensaje('❌ Error de conexión. Verifica la red Wi‑Fi y que el servidor esté encendido.', 'error');
     } finally {
         registrando = false;
         submitBtn.disabled = false;
